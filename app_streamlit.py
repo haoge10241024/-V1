@@ -6,8 +6,16 @@ import os
 import sys
 
 # 添加当前目录到系统路径
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from futures_position_analysis import FuturesPositionAnalyzer
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
+try:
+    from futures_position_analysis import FuturesPositionAnalyzer
+except ImportError as e:
+    st.error(f"导入错误：{str(e)}")
+    st.error("请确保futures_position_analysis.py文件在正确的位置")
+    st.stop()
 
 # 设置页面配置
 st.set_page_config(
@@ -26,11 +34,10 @@ analyzer = FuturesPositionAnalyzer(data_dir)
 st.title("期货持仓分析系统")
 
 # 创建日期选择器
-default_date = datetime.now().strftime("%Y%m%d")
 trade_date = st.date_input(
     "选择交易日期",
     value=datetime.now(),
-    format="YYYYMMDD"
+    format="YYYY-MM-DD"
 )
 
 # 转换日期格式
