@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import os
 import sys
+import json
 
 # 添加当前目录到系统路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -54,8 +55,11 @@ if st.button("开始分析"):
                 st.error("没有获取到分析结果")
                 st.stop()
             
-            # 为每个策略创建标签页
-            tabs = st.tabs([strategy.name for strategy in analyzer.strategies])
+            # 为每个策略创建标签页，并添加策略总结标签页
+            tabs = st.tabs([strategy.name for strategy in analyzer.strategies] + ["策略总结"])
+            
+            # 存储所有策略的信号数据
+            all_strategy_signals = {}
             
             # 显示每个策略的结果
             for i, strategy in enumerate(analyzer.strategies):
@@ -78,6 +82,12 @@ if st.button("开始分析"):
                                 'strength': strategy_data['strength'],
                                 'reason': strategy_data['reason']
                             })
+                    
+                    # 存储策略信号数据
+                    all_strategy_signals[strategy.name] = {
+                        'long': long_signals,
+                        'short': short_signals
+                    }
                     
                     # 按强度排序
                     long_signals.sort(key=lambda x: x['strength'], reverse=True)
@@ -148,6 +158,95 @@ if st.button("开始分析"):
                         )
                         
                         st.plotly_chart(fig, use_container_width=True)
+            
+            # 显示策略总结页面
+            with tabs[-1]:
+                st.header("策略总结")
+                
+                # 获取每个策略的前十名品种
+                strategy_top_10 = {}
+                for strategy_name, signals in all_strategy_signals.items():
+                    # 获取看多和看空的前十名品种
+                    long_symbols = set([s['contract'][:2] for s in signals['long'][:10]])
+                    short_symbols = set([s['contract'][:2] for s in signals['short'][:10]])
+                    strategy_top_10[strategy_name] = {
+                        'long': long_symbols,
+                        'short': short_symbols
+                    }
+                
+                # 找出共同看多的品种
+                common_long = set.intersection(*[data['long'] for data in strategy_top_10.values()])
+                # 找出共同看空的品种
+                common_short = set.intersection(*[data['short'] for data in strategy_top_10.values()])
+                
+                # 显示共同信号
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.subheader("共同看多品种")
+                    if common_long:
+                        for symbol in sorted(common_long):
+                            st.markdown(f"""
+                            <div style='background-color: #e6ffe6; padding: 10px; border-radius: 5px; margin: 5px 0;'>
+                                <strong>{symbol}</strong>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    else:
+                        st.info("没有共同看多的品种")
+                
+                with col2:
+                    st.subheader("共同看空品种")
+                    if common_short:
+                        for symbol in sorted(common_short):
+                            st.markdown(f"""
+                            <div style='background-color: #ffe6e6; padding: 10px; border-radius: 5px; margin: 5px 0;'>
+                                <strong>{symbol}</strong>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    else:
+                        st.info("没有共同看空的品种")
+                
+                # 显示每个策略的前十名
+                st.markdown("---")
+                st.subheader("各策略前十名品种")
+                
+                for strategy_name, data in strategy_top_10.items():
+                    st.markdown(f"### {strategy_name}")
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("**看多品种**")
+                        for symbol in sorted(data['long']):
+                            st.markdown(f"- {symbol}")
+                    
+                    with col2:
+                        st.markdown("**看空品种**")
+                        for symbol in sorted(data['short']):
+                            st.markdown(f"- {symbol}")
+            
+            # 添加下载按钮
+            st.markdown("---")
+            st.subheader("下载分析结果")
+            
+            # 准备下载数据
+            download_data = {
+                'trade_date': trade_date_str,
+                'results': results,
+                'strategy_summary': {
+                    'common_long': list(common_long),
+                    'common_short': list(common_short),
+                    'strategy_top_10': strategy_top_10
+                }
+            }
+            
+            # 创建下载按钮
+            json_str = json.dumps(download_data, ensure_ascii=False, indent=2)
+            st.download_button(
+                label="下载分析结果",
+                data=json_str,
+                file_name=f"futures_analysis_{trade_date_str}.json",
+                mime="application/json"
+            )
             
         except Exception as e:
             st.error(f"分析过程中出现错误：{str(e)}")
