@@ -175,23 +175,30 @@ if st.button("开始分析"):
                     long_symbols = set()
                     short_symbols = set()
                     
+                    def extract_symbol(contract):
+                        """提取品种代码的函数"""
+                        try:
+                            # 分割合约名称
+                            parts = contract.split('_')
+                            if len(parts) > 1:
+                                # 获取最后一部分（如：cu2505）
+                                symbol_part = parts[-1]
+                                # 提取字母部分
+                                symbol = ''.join(c for c in symbol_part if c.isalpha())
+                                return symbol.lower()
+                        except:
+                            return None
+                        return None
+                    
                     for signal in long_signals:
-                        contract = signal['contract']
-                        # 提取品种代码（如：上期所_cu2505 -> cu, 大商所_m2507 -> m）
-                        parts = contract.split('_')
-                        if len(parts) > 1:
-                            symbol = parts[-1]
-                            # 提取字母部分（去掉数字）
-                            symbol = ''.join(c for c in symbol if not c.isdigit())
-                            long_symbols.add(symbol.lower())
+                        symbol = extract_symbol(signal['contract'])
+                        if symbol:
+                            long_symbols.add(symbol)
                     
                     for signal in short_signals:
-                        contract = signal['contract']
-                        parts = contract.split('_')
-                        if len(parts) > 1:
-                            symbol = parts[-1]
-                            symbol = ''.join(c for c in symbol if not c.isdigit())
-                            short_symbols.add(symbol.lower())
+                        symbol = extract_symbol(signal['contract'])
+                        if symbol:
+                            short_symbols.add(symbol)
                     
                     strategy_top_10[strategy_name] = {
                         'long_signals': long_signals,
@@ -313,8 +320,10 @@ if st.button("开始分析"):
                 
                 # 写入原始数据
                 for contract, data in results.items():
-                    df = pd.DataFrame(data['raw_data'])
-                    df.to_excel(writer, sheet_name=contract[:31], index=False)  # Excel sheet名称最大31字符
+                    if 'raw_data' in data:
+                        df = pd.DataFrame(data['raw_data'])
+                        sheet_name = contract[:31]  # Excel sheet名称最大31字符
+                        df.to_excel(writer, sheet_name=sheet_name, index=False)
             
             # 创建下载按钮
             st.download_button(
@@ -322,7 +331,7 @@ if st.button("开始分析"):
                 data=output.getvalue(),
                 file_name=f"futures_analysis_{trade_date_str}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="download_excel"  # 添加唯一的key
+                key=f"download_excel_{trade_date_str}"  # 使用日期作为key的一部分
             )
             
             # 添加文本格式下载
@@ -359,7 +368,7 @@ if st.button("开始分析"):
                 data=text_output.getvalue(),
                 file_name=f"futures_analysis_{trade_date_str}.txt",
                 mime="text/plain",
-                key="download_txt"  # 添加唯一的key
+                key=f"download_txt_{trade_date_str}"  # 使用日期作为key的一部分
             )
             
         except Exception as e:
