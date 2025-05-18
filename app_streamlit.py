@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import os
 import sys
 import json
+import io
 
 # 添加当前目录到系统路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -176,14 +177,21 @@ if st.button("开始分析"):
                     
                     for signal in long_signals:
                         contract = signal['contract']
-                        # 提取品种代码（如：上期所_cu2505 -> cu）
-                        symbol = contract.split('_')[-1][:2].lower()
-                        long_symbols.add(symbol)
+                        # 提取品种代码（如：上期所_cu2505 -> cu, 大商所_m2507 -> m）
+                        parts = contract.split('_')
+                        if len(parts) > 1:
+                            symbol = parts[-1]
+                            # 提取字母部分（去掉数字）
+                            symbol = ''.join(c for c in symbol if not c.isdigit())
+                            long_symbols.add(symbol.lower())
                     
                     for signal in short_signals:
                         contract = signal['contract']
-                        symbol = contract.split('_')[-1][:2].lower()
-                        short_symbols.add(symbol)
+                        parts = contract.split('_')
+                        if len(parts) > 1:
+                            symbol = parts[-1]
+                            symbol = ''.join(c for c in symbol if not c.isdigit())
+                            short_symbols.add(symbol.lower())
                     
                     strategy_top_10[strategy_name] = {
                         'long_signals': long_signals,
@@ -206,7 +214,7 @@ if st.button("开始分析"):
                         for symbol in sorted(common_long):
                             st.markdown(f"""
                             <div style='background-color: #e6ffe6; padding: 10px; border-radius: 5px; margin: 5px 0;'>
-                                <strong>{symbol.upper()}</strong>
+                                <strong>{symbol}</strong>
                             </div>
                             """, unsafe_allow_html=True)
                     else:
@@ -218,7 +226,7 @@ if st.button("开始分析"):
                         for symbol in sorted(common_short):
                             st.markdown(f"""
                             <div style='background-color: #ffe6e6; padding: 10px; border-radius: 5px; margin: 5px 0;'>
-                                <strong>{symbol.upper()}</strong>
+                                <strong>{symbol}</strong>
                             </div>
                             """, unsafe_allow_html=True)
                     else:
@@ -258,52 +266,100 @@ if st.button("开始分析"):
             st.markdown("---")
             st.subheader("下载分析结果")
             
-            # 准备下载数据
-            def convert_to_serializable(obj):
-                if isinstance(obj, pd.DataFrame):
-                    return obj.to_dict(orient='records')
-                elif isinstance(obj, (datetime, pd.Timestamp)):
-                    return obj.strftime('%Y-%m-%d')
-                elif isinstance(obj, (list, tuple)):
-                    return [convert_to_serializable(item) for item in obj]
-                elif isinstance(obj, dict):
-                    return {key: convert_to_serializable(value) for key, value in obj.items()}
-                return obj
+            # 准备Excel数据
+            excel_data = {}
             
-            download_data = {
-                'trade_date': trade_date_str,
-                'results': convert_to_serializable(results),
-                'strategy_summary': {
-                    'common_long': list(common_long),
-                    'common_short': list(common_short),
-                    'strategy_top_10': {
-                        strategy: {
-                            'long_signals': [
-                                {
-                                    'contract': s['contract'],
-                                    'strength': float(s['strength']),
-                                    'reason': s['reason']
-                                } for s in data['long_signals']
-                            ],
-                            'short_signals': [
-                                {
-                                    'contract': s['contract'],
-                                    'strength': float(s['strength']),
-                                    'reason': s['reason']
-                                } for s in data['short_signals']
-                            ]
-                        } for strategy, data in strategy_top_10.items()
-                    }
-                }
-            }
+            # 添加策略总结数据
+            summary_data = []
+            for strategy_name, data in strategy_top_10.items():
+                # 添加看多信号
+                for signal in data['long_signals']:
+                    summary_data.append({
+                        '策略': strategy_name,
+                        '信号类型': '看多',
+                        '合约': signal['contract'],
+                        '强度': signal['strength'],
+                        '原因': signal['reason']
+                    })
+                # 添加看空信号
+                for signal in data['short_signals']:
+                    summary_data.append({
+                        '策略': strategy_name,
+                        '信号类型': '看空',
+                        '合约': signal['contract'],
+                        '强度': signal['strength'],
+                        '原因': signal['reason']
+                    })
+            
+            # 创建Excel文件
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                # 写入策略总结
+                pd.DataFrame(summary_data).to_excel(writer, sheet_name='策略总结', index=False)
+                
+                # 写入共同信号
+                common_signals = []
+                for symbol in common_long:
+                    common_signals.append({
+                        '品种': symbol,
+                        '信号类型': '共同看多'
+                    })
+                for symbol in common_short:
+                    common_signals.append({
+                        '品种': symbol,
+                        '信号类型': '共同看空'
+                    })
+                pd.DataFrame(common_signals).to_excel(writer, sheet_name='共同信号', index=False)
+                
+                # 写入原始数据
+                for contract, data in results.items():
+                    df = pd.DataFrame(data['raw_data'])
+                    df.to_excel(writer, sheet_name=contract[:31], index=False)  # Excel sheet名称最大31字符
             
             # 创建下载按钮
-            json_str = json.dumps(download_data, ensure_ascii=False, indent=2)
             st.download_button(
-                label="下载分析结果",
-                data=json_str,
-                file_name=f"futures_analysis_{trade_date_str}.json",
-                mime="application/json"
+                label="下载分析结果(Excel)",
+                data=output.getvalue(),
+                file_name=f"futures_analysis_{trade_date_str}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="download_excel"  # 添加唯一的key
+            )
+            
+            # 添加文本格式下载
+            text_output = io.StringIO()
+            text_output.write(f"期货持仓分析报告 - {trade_date_str}\n")
+            text_output.write("=" * 50 + "\n\n")
+            
+            # 写入策略总结
+            text_output.write("策略总结\n")
+            text_output.write("-" * 20 + "\n")
+            for strategy_name, data in strategy_top_10.items():
+                text_output.write(f"\n{strategy_name}:\n")
+                text_output.write("看多信号:\n")
+                for signal in data['long_signals']:
+                    text_output.write(f"- {signal['contract']} (强度: {signal['strength']:.2f})\n")
+                    text_output.write(f"  原因: {signal['reason']}\n")
+                text_output.write("\n看空信号:\n")
+                for signal in data['short_signals']:
+                    text_output.write(f"- {signal['contract']} (强度: {signal['strength']:.2f})\n")
+                    text_output.write(f"  原因: {signal['reason']}\n")
+            
+            # 写入共同信号
+            text_output.write("\n共同信号\n")
+            text_output.write("-" * 20 + "\n")
+            text_output.write("共同看多品种:\n")
+            for symbol in sorted(common_long):
+                text_output.write(f"- {symbol}\n")
+            text_output.write("\n共同看空品种:\n")
+            for symbol in sorted(common_short):
+                text_output.write(f"- {symbol}\n")
+            
+            st.download_button(
+                label="下载分析结果(TXT)",
+                data=text_output.getvalue(),
+                file_name=f"futures_analysis_{trade_date_str}.txt",
+                mime="text/plain",
+                key="download_txt"  # 添加唯一的key
             )
             
         except Exception as e:
