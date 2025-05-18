@@ -166,18 +166,36 @@ if st.button("开始分析"):
                 # 获取每个策略的前十名品种
                 strategy_top_10 = {}
                 for strategy_name, signals in all_strategy_signals.items():
-                    # 获取看多和看空的前十名品种
-                    long_symbols = set([s['contract'][:2] for s in signals['long'][:10]])
-                    short_symbols = set([s['contract'][:2] for s in signals['short'][:10]])
+                    # 获取看多和看空的前十名
+                    long_signals = signals['long'][:10]
+                    short_signals = signals['short'][:10]
+                    
+                    # 提取品种代码（去掉交易所前缀和数字）
+                    long_symbols = set()
+                    short_symbols = set()
+                    
+                    for signal in long_signals:
+                        contract = signal['contract']
+                        # 提取品种代码（如：上期所_cu2505 -> cu）
+                        symbol = contract.split('_')[-1][:2].lower()
+                        long_symbols.add(symbol)
+                    
+                    for signal in short_signals:
+                        contract = signal['contract']
+                        symbol = contract.split('_')[-1][:2].lower()
+                        short_symbols.add(symbol)
+                    
                     strategy_top_10[strategy_name] = {
-                        'long': long_symbols,
-                        'short': short_symbols
+                        'long_signals': long_signals,
+                        'short_signals': short_signals,
+                        'long_symbols': long_symbols,
+                        'short_symbols': short_symbols
                     }
                 
                 # 找出共同看多的品种
-                common_long = set.intersection(*[data['long'] for data in strategy_top_10.values()])
+                common_long = set.intersection(*[data['long_symbols'] for data in strategy_top_10.values()])
                 # 找出共同看空的品种
-                common_short = set.intersection(*[data['short'] for data in strategy_top_10.values()])
+                common_short = set.intersection(*[data['short_symbols'] for data in strategy_top_10.values()])
                 
                 # 显示共同信号
                 col1, col2 = st.columns(2)
@@ -188,7 +206,7 @@ if st.button("开始分析"):
                         for symbol in sorted(common_long):
                             st.markdown(f"""
                             <div style='background-color: #e6ffe6; padding: 10px; border-radius: 5px; margin: 5px 0;'>
-                                <strong>{symbol}</strong>
+                                <strong>{symbol.upper()}</strong>
                             </div>
                             """, unsafe_allow_html=True)
                     else:
@@ -200,7 +218,7 @@ if st.button("开始分析"):
                         for symbol in sorted(common_short):
                             st.markdown(f"""
                             <div style='background-color: #ffe6e6; padding: 10px; border-radius: 5px; margin: 5px 0;'>
-                                <strong>{symbol}</strong>
+                                <strong>{symbol.upper()}</strong>
                             </div>
                             """, unsafe_allow_html=True)
                     else:
@@ -216,26 +234,66 @@ if st.button("开始分析"):
                     
                     with col1:
                         st.markdown("**看多品种**")
-                        for symbol in sorted(data['long']):
-                            st.markdown(f"- {symbol}")
+                        for signal in data['long_signals']:
+                            st.markdown(f"""
+                            <div style='background-color: #e6ffe6; padding: 10px; border-radius: 5px; margin: 5px 0;'>
+                                <strong>{signal['contract']}</strong><br>
+                                强度: {signal['strength']:.2f}<br>
+                                {signal['reason']}
+                            </div>
+                            """, unsafe_allow_html=True)
                     
                     with col2:
                         st.markdown("**看空品种**")
-                        for symbol in sorted(data['short']):
-                            st.markdown(f"- {symbol}")
+                        for signal in data['short_signals']:
+                            st.markdown(f"""
+                            <div style='background-color: #ffe6e6; padding: 10px; border-radius: 5px; margin: 5px 0;'>
+                                <strong>{signal['contract']}</strong><br>
+                                强度: {signal['strength']:.2f}<br>
+                                {signal['reason']}
+                            </div>
+                            """, unsafe_allow_html=True)
             
             # 添加下载按钮
             st.markdown("---")
             st.subheader("下载分析结果")
             
             # 准备下载数据
+            def convert_to_serializable(obj):
+                if isinstance(obj, pd.DataFrame):
+                    return obj.to_dict(orient='records')
+                elif isinstance(obj, (datetime, pd.Timestamp)):
+                    return obj.strftime('%Y-%m-%d')
+                elif isinstance(obj, (list, tuple)):
+                    return [convert_to_serializable(item) for item in obj]
+                elif isinstance(obj, dict):
+                    return {key: convert_to_serializable(value) for key, value in obj.items()}
+                return obj
+            
             download_data = {
                 'trade_date': trade_date_str,
-                'results': results,
+                'results': convert_to_serializable(results),
                 'strategy_summary': {
                     'common_long': list(common_long),
                     'common_short': list(common_short),
-                    'strategy_top_10': strategy_top_10
+                    'strategy_top_10': {
+                        strategy: {
+                            'long_signals': [
+                                {
+                                    'contract': s['contract'],
+                                    'strength': float(s['strength']),
+                                    'reason': s['reason']
+                                } for s in data['long_signals']
+                            ],
+                            'short_signals': [
+                                {
+                                    'contract': s['contract'],
+                                    'strength': float(s['strength']),
+                                    'reason': s['reason']
+                                } for s in data['short_signals']
+                            ]
+                        } for strategy, data in strategy_top_10.items()
+                    }
                 }
             }
             
@@ -250,6 +308,8 @@ if st.button("开始分析"):
             
         except Exception as e:
             st.error(f"分析过程中出现错误：{str(e)}")
+            st.error("详细错误信息：")
+            st.exception(e)
 
 # 添加使用说明
 with st.expander("使用说明"):
@@ -259,6 +319,24 @@ with st.expander("使用说明"):
     2. 点击"开始分析"按钮
     3. 等待分析完成
     4. 查看不同策略的分析结果
+    
+    ### 策略说明
+    
+    #### 多空力量对比策略
+    该策略通过分析期货市场中的多空持仓变化来判断市场趋势。主要原理包括：
+    - 分析主力合约的持仓量变化
+    - 计算多空双方的力量对比
+    - 考虑持仓量的变化趋势
+    - 结合成交量进行分析
+    当多方力量明显强于空方时，给出看多信号；反之则给出看空信号。
+    
+    #### 蜘蛛网策略
+    该策略基于市场微观结构理论，通过分析价格和成交量的关系来判断市场趋势。主要原理包括：
+    - 分析价格与成交量的相关性
+    - 计算市场深度指标
+    - 识别知情交易者的行为特征
+    - 评估市场流动性状况
+    当市场微观结构显示强势特征时，给出看多信号；反之则给出看空信号。
     
     ### 注意事项
     - 首次运行需要下载数据，可能较慢
