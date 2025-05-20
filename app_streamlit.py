@@ -170,10 +170,7 @@ if st.button("开始分析"):
                     if 'raw_data' in data:
                         df = pd.DataFrame(data['raw_data'])
                         if not df.empty:
-                            # 添加品种信息
                             df['variety'] = contract.split('_')[-1][:2].lower()
-                            # 打印列名，用于调试
-                            st.write(f"合约 {contract} 的列名：", df.columns.tolist())
                             term_structure_data.append(df)
                 
                 if term_structure_data:
@@ -188,7 +185,6 @@ if st.button("开始分析"):
                         # 检查必要的列是否存在
                         required_columns = ['symbol', 'long_open_interest', 'short_open_interest']
                         if not all(col in variety_data.columns for col in required_columns):
-                            st.warning(f"品种 {variety} 缺少必要的列：{required_columns}")
                             continue
                         
                         # 按合约代码排序
@@ -223,47 +219,44 @@ if st.button("开始分析"):
                     contango_results = [r for r in results_list if r[1] == "contango"]
                     flat_results = [r for r in results_list if r[1] == "flat"]
                     
+                    # 创建三列布局
+                    col1, col2, col3 = st.columns(3)
+                    
                     # 显示Back结构品种
-                    st.subheader("Back结构品种（近强远弱）")
-                    if back_results:
-                        for variety, structure, contracts, prices in back_results:
-                            st.markdown(f"""
-                            <div style='background-color: #ffe6e6; padding: 10px; border-radius: 5px; margin: 5px 0;'>
-                                <strong>品种: {variety}</strong><br>
-                                合约持仓详情:<br>
-                                {''.join(f'  {contract}: {price:.0f}<br>' for contract, price in zip(contracts, prices))}
-                            </div>
-                            """, unsafe_allow_html=True)
-                    else:
-                        st.info("无")
+                    with col1:
+                        st.subheader("Back结构")
+                        if back_results:
+                            for variety, structure, contracts, prices in back_results:
+                                st.markdown(f"**{variety}**")
+                                for contract, price in zip(contracts, prices):
+                                    st.markdown(f"{contract}: {price:.0f}")
+                                st.markdown("---")
+                        else:
+                            st.info("无")
                     
                     # 显示Contango结构品种
-                    st.subheader("Contango结构品种（近弱远强）")
-                    if contango_results:
-                        for variety, structure, contracts, prices in contango_results:
-                            st.markdown(f"""
-                            <div style='background-color: #e6ffe6; padding: 10px; border-radius: 5px; margin: 5px 0;'>
-                                <strong>品种: {variety}</strong><br>
-                                合约持仓详情:<br>
-                                {''.join(f'  {contract}: {price:.0f}<br>' for contract, price in zip(contracts, prices))}
-                            </div>
-                            """, unsafe_allow_html=True)
-                    else:
-                        st.info("无")
+                    with col2:
+                        st.subheader("Contango结构")
+                        if contango_results:
+                            for variety, structure, contracts, prices in contango_results:
+                                st.markdown(f"**{variety}**")
+                                for contract, price in zip(contracts, prices):
+                                    st.markdown(f"{contract}: {price:.0f}")
+                                st.markdown("---")
+                        else:
+                            st.info("无")
                     
                     # 显示Flat结构品种
-                    st.subheader("Flat结构品种（近远月持仓相近）")
-                    if flat_results:
-                        for variety, structure, contracts, prices in flat_results:
-                            st.markdown(f"""
-                            <div style='background-color: #f0f0f0; padding: 10px; border-radius: 5px; margin: 5px 0;'>
-                                <strong>品种: {variety}</strong><br>
-                                合约持仓详情:<br>
-                                {''.join(f'  {contract}: {price:.0f}<br>' for contract, price in zip(contracts, prices))}
-                            </div>
-                            """, unsafe_allow_html=True)
-                    else:
-                        st.info("无")
+                    with col3:
+                        st.subheader("Flat结构")
+                        if flat_results:
+                            for variety, structure, contracts, prices in flat_results:
+                                st.markdown(f"**{variety}**")
+                                for contract, price in zip(contracts, prices):
+                                    st.markdown(f"{contract}: {price:.0f}")
+                                st.markdown("---")
+                        else:
+                            st.info("无")
                     
                     # 显示统计信息
                     st.markdown("---")
