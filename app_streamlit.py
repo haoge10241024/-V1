@@ -179,12 +179,38 @@ if st.button("开始分析"):
                     all_data = pd.concat(term_structure_data, ignore_index=True)
                     
                     # 分析期限结构
-                    term_results = analyze_term_structure(all_data)
+                    results_list = []
+                    for variety in all_data['variety'].unique():
+                        variety_data = all_data[all_data['variety'] == variety].copy()
+                        
+                        # 按合约代码排序
+                        variety_data = variety_data.sort_values('symbol')
+                        
+                        # 获取合约列表和对应的收盘价
+                        contracts = variety_data['symbol'].tolist()
+                        closes = variety_data['close'].tolist()
+                        
+                        # 检查是否有足够的数据进行分析
+                        if len(contracts) < 2:
+                            continue
+                            
+                        # 分析期限结构
+                        is_decreasing = all(closes[i] > closes[i+1] for i in range(len(closes)-1))
+                        is_increasing = all(closes[i] < closes[i+1] for i in range(len(closes)-1))
+
+                        if is_decreasing:
+                            structure = "back"
+                        elif is_increasing:
+                            structure = "contango"
+                        else:
+                            structure = "flat"
+                            
+                        results_list.append((variety, structure, contracts, closes))
                     
                     # 按期限结构类型分类
-                    back_results = [r for r in term_results if r[1] == "back"]
-                    contango_results = [r for r in term_results if r[1] == "contango"]
-                    flat_results = [r for r in term_results if r[1] == "flat"]
+                    back_results = [r for r in results_list if r[1] == "back"]
+                    contango_results = [r for r in results_list if r[1] == "contango"]
+                    flat_results = [r for r in results_list if r[1] == "flat"]
                     
                     # 显示Back结构品种
                     st.subheader("Back结构品种（近强远弱）")
@@ -235,7 +261,7 @@ if st.button("开始分析"):
                     - Back结构品种数量: {len(back_results)}
                     - Contango结构品种数量: {len(contango_results)}
                     - Flat结构品种数量: {len(flat_results)}
-                    - 总品种数量: {len(term_results)}
+                    - 总品种数量: {len(results_list)}
                     """)
                 else:
                     st.warning("没有可用的期限结构数据")
