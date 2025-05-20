@@ -13,9 +13,10 @@ if current_dir not in sys.path:
 
 try:
     from futures_position_analysis import FuturesPositionAnalyzer
+    from analyze_term_structure import analyze_term_structure
 except ImportError as e:
     st.error(f"导入错误：{str(e)}")
-    st.error("请确保futures_position_analysis.py文件在正确的位置")
+    st.error("请确保futures_position_analysis.py和analyze_term_structure.py文件在正确的位置")
     st.stop()
 
 # 设置页面配置
