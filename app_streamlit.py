@@ -172,6 +172,8 @@ if st.button("开始分析"):
                         if not df.empty:
                             # 添加品种信息
                             df['variety'] = contract.split('_')[-1][:2].lower()
+                            # 打印列名，用于调试
+                            st.write(f"合约 {contract} 的列名：", df.columns.tolist())
                             term_structure_data.append(df)
                 
                 if term_structure_data:
@@ -183,20 +185,29 @@ if st.button("开始分析"):
                     for variety in all_data['variety'].unique():
                         variety_data = all_data[all_data['variety'] == variety].copy()
                         
+                        # 检查必要的列是否存在
+                        required_columns = ['symbol', 'long_open_interest', 'short_open_interest']
+                        if not all(col in variety_data.columns for col in required_columns):
+                            st.warning(f"品种 {variety} 缺少必要的列：{required_columns}")
+                            continue
+                        
                         # 按合约代码排序
                         variety_data = variety_data.sort_values('symbol')
                         
-                        # 获取合约列表和对应的收盘价
+                        # 使用持仓量作为价格指标
+                        variety_data['price_indicator'] = variety_data['long_open_interest'] + variety_data['short_open_interest']
+                        
+                        # 获取合约列表和对应的价格指标
                         contracts = variety_data['symbol'].tolist()
-                        closes = variety_data['close'].tolist()
+                        prices = variety_data['price_indicator'].tolist()
                         
                         # 检查是否有足够的数据进行分析
                         if len(contracts) < 2:
                             continue
                             
                         # 分析期限结构
-                        is_decreasing = all(closes[i] > closes[i+1] for i in range(len(closes)-1))
-                        is_increasing = all(closes[i] < closes[i+1] for i in range(len(closes)-1))
+                        is_decreasing = all(prices[i] > prices[i+1] for i in range(len(prices)-1))
+                        is_increasing = all(prices[i] < prices[i+1] for i in range(len(prices)-1))
 
                         if is_decreasing:
                             structure = "back"
@@ -205,7 +216,7 @@ if st.button("开始分析"):
                         else:
                             structure = "flat"
                             
-                        results_list.append((variety, structure, contracts, closes))
+                        results_list.append((variety, structure, contracts, prices))
                     
                     # 按期限结构类型分类
                     back_results = [r for r in results_list if r[1] == "back"]
@@ -215,12 +226,12 @@ if st.button("开始分析"):
                     # 显示Back结构品种
                     st.subheader("Back结构品种（近强远弱）")
                     if back_results:
-                        for variety, structure, contracts, closes in back_results:
+                        for variety, structure, contracts, prices in back_results:
                             st.markdown(f"""
                             <div style='background-color: #ffe6e6; padding: 10px; border-radius: 5px; margin: 5px 0;'>
                                 <strong>品种: {variety}</strong><br>
-                                合约价格详情:<br>
-                                {''.join(f'  {contract}: {close}<br>' for contract, close in zip(contracts, closes))}
+                                合约持仓详情:<br>
+                                {''.join(f'  {contract}: {price:.0f}<br>' for contract, price in zip(contracts, prices))}
                             </div>
                             """, unsafe_allow_html=True)
                     else:
@@ -229,26 +240,26 @@ if st.button("开始分析"):
                     # 显示Contango结构品种
                     st.subheader("Contango结构品种（近弱远强）")
                     if contango_results:
-                        for variety, structure, contracts, closes in contango_results:
+                        for variety, structure, contracts, prices in contango_results:
                             st.markdown(f"""
                             <div style='background-color: #e6ffe6; padding: 10px; border-radius: 5px; margin: 5px 0;'>
                                 <strong>品种: {variety}</strong><br>
-                                合约价格详情:<br>
-                                {''.join(f'  {contract}: {close}<br>' for contract, close in zip(contracts, closes))}
+                                合约持仓详情:<br>
+                                {''.join(f'  {contract}: {price:.0f}<br>' for contract, price in zip(contracts, prices))}
                             </div>
                             """, unsafe_allow_html=True)
                     else:
                         st.info("无")
                     
                     # 显示Flat结构品种
-                    st.subheader("Flat结构品种（近远月价格相近）")
+                    st.subheader("Flat结构品种（近远月持仓相近）")
                     if flat_results:
-                        for variety, structure, contracts, closes in flat_results:
+                        for variety, structure, contracts, prices in flat_results:
                             st.markdown(f"""
                             <div style='background-color: #f0f0f0; padding: 10px; border-radius: 5px; margin: 5px 0;'>
                                 <strong>品种: {variety}</strong><br>
-                                合约价格详情:<br>
-                                {''.join(f'  {contract}: {close}<br>' for contract, close in zip(contracts, closes))}
+                                合约持仓详情:<br>
+                                {''.join(f'  {contract}: {price:.0f}<br>' for contract, price in zip(contracts, prices))}
                             </div>
                             """, unsafe_allow_html=True)
                     else:
@@ -474,25 +485,25 @@ if st.button("开始分析"):
             text_output.write("-" * 20 + "\n")
             
             text_output.write("\nBack结构品种（近强远弱）:\n")
-            for variety, structure, contracts, closes in back_results:
+            for variety, structure, contracts, prices in back_results:
                 text_output.write(f"\n品种: {variety}\n")
-                text_output.write("合约价格详情:\n")
-                for contract, close in zip(contracts, closes):
-                    text_output.write(f"  {contract}: {close}\n")
+                text_output.write("合约持仓详情:\n")
+                for contract, price in zip(contracts, prices):
+                    text_output.write(f"  {contract}: {price:.0f}\n")
             
             text_output.write("\nContango结构品种（近弱远强）:\n")
-            for variety, structure, contracts, closes in contango_results:
+            for variety, structure, contracts, prices in contango_results:
                 text_output.write(f"\n品种: {variety}\n")
-                text_output.write("合约价格详情:\n")
-                for contract, close in zip(contracts, closes):
-                    text_output.write(f"  {contract}: {close}\n")
+                text_output.write("合约持仓详情:\n")
+                for contract, price in zip(contracts, prices):
+                    text_output.write(f"  {contract}: {price:.0f}\n")
             
-            text_output.write("\nFlat结构品种（近远月价格相近）:\n")
-            for variety, structure, contracts, closes in flat_results:
+            text_output.write("\nFlat结构品种（近远月持仓相近）:\n")
+            for variety, structure, contracts, prices in flat_results:
                 text_output.write(f"\n品种: {variety}\n")
-                text_output.write("合约价格详情:\n")
-                for contract, close in zip(contracts, closes):
-                    text_output.write(f"  {contract}: {close}\n")
+                text_output.write("合约持仓详情:\n")
+                for contract, price in zip(contracts, prices):
+                    text_output.write(f"  {contract}: {price:.0f}\n")
             
             # 获取文本内容并创建下载按钮
             text_content = text_output.getvalue()
