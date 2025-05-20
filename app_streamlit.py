@@ -171,6 +171,8 @@ if st.button("开始分析"):
                     if 'raw_data' in data:
                         df = pd.DataFrame(data['raw_data'])
                         if not df.empty:
+                            # 添加品种信息
+                            df['variety'] = contract.split('_')[-1][:2].lower()
                             term_structure_data.append(df)
                 
                 if term_structure_data:
