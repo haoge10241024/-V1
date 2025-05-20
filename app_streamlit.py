@@ -4,9 +4,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import os
 import sys
-import json
 import io
-from analyze_term_structure import analyze_term_structure
 
 # 添加当前目录到系统路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
