@@ -225,63 +225,60 @@ def main():
                         contracts = variety_data['symbol'].tolist()
                         prices = variety_data['price_indicator'].tolist()
                         
-                        # 检查是否有足够的数据进行分析
-                        if len(contracts) < 2:
+                        # 检查是否有足够的数据进行分析（至少需要3个合约）
+                        if len(contracts) < 3:
                             continue
                             
-                        # 分析期限结构
-                        is_decreasing = all(prices[i] > prices[i+1] for i in range(len(prices)-1))
-                        is_increasing = all(prices[i] < prices[i+1] for i in range(len(prices)-1))
-
-                        if is_decreasing:
+                        # 计算相邻合约的价格变化率
+                        price_changes = []
+                        for i in range(len(prices)-1):
+                            change_rate = (prices[i+1] - prices[i]) / prices[i]
+                            price_changes.append(change_rate)
+                        
+                        # 判断结构类型
+                        # 如果所有变化率都小于-0.05，则为Back结构
+                        # 如果所有变化率都大于0.05，则为Contango结构
+                        # 其他情况不归类
+                        if all(rate < -0.05 for rate in price_changes):
                             structure = "back"
-                        elif is_increasing:
+                        elif all(rate > 0.05 for rate in price_changes):
                             structure = "contango"
                         else:
-                            structure = "flat"
+                            continue  # 跳过不符合条件的品种
                             
                         results_list.append((variety, structure, contracts, prices))
                     
                     # 按期限结构类型分类
                     back_results = [r for r in results_list if r[1] == "back"]
                     contango_results = [r for r in results_list if r[1] == "contango"]
-                    flat_results = [r for r in results_list if r[1] == "flat"]
                     
-                    # 创建三列布局
-                    col1, col2, col3 = st.columns(3)
+                    # 创建两列布局
+                    col1, col2 = st.columns(2)
                     
                     # 显示Back结构品种
                     with col1:
-                        st.subheader("Back结构")
+                        st.subheader("Back结构（近强远弱）")
                         if back_results:
                             for variety, structure, contracts, prices in back_results:
                                 st.markdown(f"**{variety}**")
-                                for contract, price in zip(contracts, prices):
-                                    st.markdown(f"{contract}: {price:.0f}")
+                                # 计算并显示变化率
+                                for i in range(len(contracts)-1):
+                                    change_rate = (prices[i+1] - prices[i]) / prices[i] * 100
+                                    st.markdown(f"{contracts[i]} → {contracts[i+1]}: {change_rate:.1f}%")
                                 st.markdown("---")
                         else:
                             st.info("无")
                     
                     # 显示Contango结构品种
                     with col2:
-                        st.subheader("Contango结构")
+                        st.subheader("Contango结构（近弱远强）")
                         if contango_results:
                             for variety, structure, contracts, prices in contango_results:
                                 st.markdown(f"**{variety}**")
-                                for contract, price in zip(contracts, prices):
-                                    st.markdown(f"{contract}: {price:.0f}")
-                                st.markdown("---")
-                        else:
-                            st.info("无")
-                    
-                    # 显示Flat结构品种
-                    with col3:
-                        st.subheader("Flat结构")
-                        if flat_results:
-                            for variety, structure, contracts, prices in flat_results:
-                                st.markdown(f"**{variety}**")
-                                for contract, price in zip(contracts, prices):
-                                    st.markdown(f"{contract}: {price:.0f}")
+                                # 计算并显示变化率
+                                for i in range(len(contracts)-1):
+                                    change_rate = (prices[i+1] - prices[i]) / prices[i] * 100
+                                    st.markdown(f"{contracts[i]} → {contracts[i+1]}: {change_rate:.1f}%")
                                 st.markdown("---")
                         else:
                             st.info("无")
@@ -292,7 +289,6 @@ def main():
                     ### 统计信息
                     - Back结构品种数量: {len(back_results)}
                     - Contango结构品种数量: {len(contango_results)}
-                    - Flat结构品种数量: {len(flat_results)}
                     - 总品种数量: {len(results_list)}
                     """)
                 else:
@@ -514,13 +510,6 @@ def main():
             
             text_output.write("\nContango结构品种（近弱远强）:\n")
             for variety, structure, contracts, prices in contango_results:
-                text_output.write(f"\n品种: {variety}\n")
-                text_output.write("合约持仓详情:\n")
-                for contract, price in zip(contracts, prices):
-                    text_output.write(f"  {contract}: {price:.0f}\n")
-            
-            text_output.write("\nFlat结构品种（近远月持仓相近）:\n")
-            for variety, structure, contracts, prices in flat_results:
                 text_output.write(f"\n品种: {variety}\n")
                 text_output.write("合约持仓详情:\n")
                 for contract, price in zip(contracts, prices):
