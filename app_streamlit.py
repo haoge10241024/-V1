@@ -288,10 +288,9 @@ def main():
                             # 按期限结构类型分类
                             back_results = [r for r in structure_results if r[1] == "back"]
                             contango_results = [r for r in structure_results if r[1] == "contango"]
-                            flat_results = [r for r in structure_results if r[1] == "flat"]
                             
-                            # 创建三列布局
-                            col1, col2, col3 = st.columns(3)
+                            # 创建两列布局
+                            col1, col2 = st.columns(2)
                             
                             with col1:
                                 st.subheader("Back结构（近强远弱）")
@@ -349,41 +348,12 @@ def main():
                                 else:
                                     st.info("无Contango结构品种")
                             
-                            with col3:
-                                st.subheader("Flat结构（价格相近）")
-                                if flat_results:
-                                    for variety, structure, contracts, closes in flat_results:
-                                        try:
-                                            st.markdown(f"**{variety}**")
-                                            # 安全计算价格变化百分比
-                                            changes = ['']
-                                            for i in range(len(closes)-1):
-                                                if closes[i] != 0:
-                                                    change_pct = ((closes[i+1]-closes[i])/closes[i]*100)
-                                                    changes.append(f'{change_pct:+.2f}%')
-                                                else:
-                                                    changes.append('N/A')
-                                            
-                                            price_df = pd.DataFrame({
-                                                '合约': contracts,
-                                                '收盘价': closes,
-                                                '变化': changes
-                                            })
-                                            st.dataframe(price_df, use_container_width=True)
-                                            st.markdown("---")
-                                        except Exception as e:
-                                            st.warning(f"显示{variety}数据时出错: {str(e)}")
-                                            continue
-                                else:
-                                    st.info("无Flat结构品种")
-                            
                             # 统计信息
                             st.markdown("---")
                             st.markdown(f"""
                             ### 统计信息
                             - Back结构品种数量: {len(back_results)}
                             - Contango结构品种数量: {len(contango_results)}
-                            - Flat结构品种数量: {len(flat_results)}
                             - 总品种数量: {len(structure_results)}
                             """)
                             
@@ -437,58 +407,91 @@ def main():
             # 显示家人席位反向操作策略页面
             with tabs[3]:
                 st.header("家人席位反向操作策略")
+                
+                # 分类和处理数据
                 retail_long = []
                 retail_short = []
+                
                 for contract, data in retail_results.items():
-                    ratio_value = data.get('retail_ratio', 0)
-                    try:
-                        ratio_value = float(ratio_value) if ratio_value is not None else 0.0
-                    except Exception:
-                        ratio_value = 0.0
-                    if data['signal'] == '看多':
-                        retail_long.append({'contract': contract, 'strength': data['strength'], 'reason': data['reason'], 'seat_details': data['seat_details'], 'raw_df': data['raw_df'], 'retail_ratio': ratio_value})
-                    elif data['signal'] == '看空':
-                        retail_short.append({'contract': contract, 'strength': data['strength'], 'reason': data['reason'], 'seat_details': data['seat_details'], 'raw_df': data['raw_df'], 'retail_ratio': ratio_value})
-                # 调试信息：排序前
-                st.write("调试信息 - 排序前看多信号:")
-                for item in retail_long[:3]:  # 只显示前3个
-                    st.write(f"{item['contract']}: {item['retail_ratio']}")
-                # 严格按retail_ratio从大到小排序，确保为float
+                    if data['signal'] == '看多' or data['signal'] == '看空':
+                        ratio_value = data.get('retail_ratio', 0)
+                        try:
+                            ratio_value = float(ratio_value) if ratio_value is not None else 0.0
+                        except Exception:
+                            ratio_value = 0.0
+                        
+                        signal_data = {
+                            'contract': contract, 
+                            'strength': data['strength'], 
+                            'reason': data['reason'], 
+                            'seat_details': data['seat_details'], 
+                            'raw_df': data['raw_df'], 
+                            'retail_ratio': ratio_value
+                        }
+                        
+                        if data['signal'] == '看多':
+                            retail_long.append(signal_data)
+                        elif data['signal'] == '看空':
+                            retail_short.append(signal_data)
+                
+                # 按家人席位持仓占比排序（从大到小）
                 retail_long = sorted(retail_long, key=lambda x: float(x.get('retail_ratio', 0)), reverse=True)
                 retail_short = sorted(retail_short, key=lambda x: float(x.get('retail_ratio', 0)), reverse=True)
-                # 调试信息：排序后
-                st.write("调试信息 - 排序后看多信号:")
-                for item in retail_long[:3]:  # 只显示前3个
-                    st.write(f"{item['contract']}: {item['retail_ratio']}")
+                
+                # 存储策略信号数据
                 all_strategy_signals['家人席位反向操作策略'] = {
                     'long': retail_long,
                     'short': retail_short
                 }
+                
+                # 显示看多信号
                 st.subheader("看多信号")
                 if retail_long:
                     for idx, signal in enumerate(retail_long, 1):
-                        st.markdown(f"{idx}. **{signal['contract']}**  强度: {signal['strength']:.2f}  占比: {signal['retail_ratio']:.2%}  {signal['reason']}")
+                        st.markdown(f"**{idx}. {signal['contract']}**")
+                        st.markdown(f"强度: {signal['strength']:.4f} | 家人席位占比: {signal['retail_ratio']:.2%}")
+                        st.markdown(f"信号原因: {signal['reason']}")
+                        
                         if signal['seat_details']:
-                            st.markdown("家人席位持仓变化：")
+                            st.markdown("**家人席位持仓变化：**")
                             for seat in signal['seat_details']:
                                 st.markdown(f"- {seat['seat_name']}: 多单变化{seat['long_chg']}手, 空单变化{seat['short_chg']}手")
-                        st.markdown("席位明细：")
-                        st.dataframe(signal['raw_df'])
+                        
+                        with st.expander(f"查看{signal['contract']}席位明细"):
+                            st.dataframe(signal['raw_df'], use_container_width=True)
+                        
+                        st.markdown("---")
                 else:
                     st.info("无看多信号")
+                
+                # 显示看空信号
                 st.subheader("看空信号")
                 if retail_short:
                     for idx, signal in enumerate(retail_short, 1):
-                        st.markdown(f"{idx}. **{signal['contract']}**  强度: {signal['strength']:.2f}  占比: {signal['retail_ratio']:.2%}  {signal['reason']}")
+                        st.markdown(f"**{idx}. {signal['contract']}**")
+                        st.markdown(f"强度: {signal['strength']:.4f} | 家人席位占比: {signal['retail_ratio']:.2%}")
+                        st.markdown(f"信号原因: {signal['reason']}")
+                        
                         if signal['seat_details']:
-                            st.markdown("家人席位持仓变化：")
+                            st.markdown("**家人席位持仓变化：**")
                             for seat in signal['seat_details']:
                                 st.markdown(f"- {seat['seat_name']}: 多单变化{seat['long_chg']}手, 空单变化{seat['short_chg']}手")
-                        st.markdown("席位明细：")
-                        st.dataframe(signal['raw_df'])
+                        
+                        with st.expander(f"查看{signal['contract']}席位明细"):
+                            st.dataframe(signal['raw_df'], use_container_width=True)
+                        
+                        st.markdown("---")
                 else:
                     st.info("无看空信号")
-                st.markdown(f"看多信号品种数量：{len(retail_long)}  看空信号品种数量：{len(retail_short)}")
+                
+                # 统计信息
+                st.markdown("---")
+                st.markdown(f"""
+                ### 统计信息
+                - 看多信号品种数量：{len(retail_long)}
+                - 看空信号品种数量：{len(retail_short)}
+                - 总分析品种数量：{len(retail_results)}
+                """)
             
             # 显示策略总结页面
             with tabs[4]:
@@ -696,7 +699,6 @@ def main():
             if 'structure_results' in locals() and structure_results:
                 back_results_txt = [r for r in structure_results if r[1] == "back"]
                 contango_results_txt = [r for r in structure_results if r[1] == "contango"]
-                flat_results_txt = [r for r in structure_results if r[1] == "flat"]
                 
                 text_output.write("\nBack结构品种（近强远弱）:\n")
                 if back_results_txt:
@@ -718,20 +720,9 @@ def main():
                 else:
                     text_output.write("无\n")
                 
-                text_output.write("\nFlat结构品种（价格相近）:\n")
-                if flat_results_txt:
-                    for variety, structure, contracts, closes in flat_results_txt:
-                        text_output.write(f"\n品种: {variety}\n")
-                        text_output.write("合约价格详情:\n")
-                        for contract, close in zip(contracts, closes):
-                            text_output.write(f"  {contract}: {close:.2f}\n")
-                else:
-                    text_output.write("无\n")
-                
                 text_output.write(f"\n统计信息:\n")
                 text_output.write(f"Back结构品种数量: {len(back_results_txt)}\n")
                 text_output.write(f"Contango结构品种数量: {len(contango_results_txt)}\n")
-                text_output.write(f"Flat结构品种数量: {len(flat_results_txt)}\n")
                 text_output.write(f"总品种数量: {len(structure_results)}\n")
             else:
                 text_output.write("无期限结构分析数据\n")
