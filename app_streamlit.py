@@ -189,7 +189,6 @@ def main():
             # 显示期限结构分析页面
             with tabs[2]:
                 st.header("期限结构分析")
-                
                 # 准备期限结构分析数据
                 term_structure_data = []
                 for contract, data in results.items():
@@ -198,90 +197,64 @@ def main():
                         if not df.empty:
                             df['variety'] = contract.split('_')[-1][:2].lower()
                             term_structure_data.append(df)
-                
                 if term_structure_data:
                     # 合并所有数据
                     all_data = pd.concat(term_structure_data, ignore_index=True)
-                    
                     # 分析期限结构
                     results_list = []
                     for variety in all_data['variety'].unique():
                         variety_data = all_data[all_data['variety'] == variety].copy()
-                        
-                        # 检查必要的列是否存在
                         required_columns = ['symbol', 'long_open_interest', 'short_open_interest']
                         if not all(col in variety_data.columns for col in required_columns):
                             continue
-                        
-                        # 按合约代码排序
                         variety_data = variety_data.sort_values('symbol')
-                        
-                        # 使用持仓量作为价格指标
                         variety_data['price_indicator'] = variety_data['long_open_interest'] + variety_data['short_open_interest']
-                        
-                        # 获取合约列表和对应的价格指标
                         contracts = variety_data['symbol'].tolist()
                         prices = variety_data['price_indicator'].tolist()
-                        
-                        # 检查是否有足够的数据进行分析（至少需要3个合约）
                         if len(contracts) < 3:
                             continue
-                            
-                        # 计算相邻合约的价格变化率
                         price_changes = []
                         for i in range(len(prices)-1):
+                            if prices[i] == 0:
+                                continue  # 跳过分母为0的情况，防止ZeroDivisionError
                             change_rate = (prices[i+1] - prices[i]) / prices[i]
                             price_changes.append(change_rate)
-                        
-                        # 判断结构类型
-                        # 如果所有变化率都小于-0.05，则为Back结构
-                        # 如果所有变化率都大于0.05，则为Contango结构
-                        # 其他情况不归类
-                        if all(rate < -0.05 for rate in price_changes):
+                        if price_changes and all(rate < -0.05 for rate in price_changes):
                             structure = "back"
-                        elif all(rate > 0.05 for rate in price_changes):
+                        elif price_changes and all(rate > 0.05 for rate in price_changes):
                             structure = "contango"
                         else:
-                            continue  # 跳过不符合条件的品种
-                            
+                            continue
                         results_list.append((variety, structure, contracts, prices))
-                    
-                    # 按期限结构类型分类
                     back_results = [r for r in results_list if r[1] == "back"]
                     contango_results = [r for r in results_list if r[1] == "contango"]
-                    
-                    # 创建两列布局
                     col1, col2 = st.columns(2)
-                    
-                    # 显示Back结构品种
                     with col1:
                         st.subheader("Back结构（近强远弱）")
                         if back_results:
                             for variety, structure, contracts, prices in back_results:
                                 st.markdown(f"**{variety}**")
-                                # 计算并显示变化率
                                 for i in range(len(contracts)-1):
+                                    if prices[i] == 0:
+                                        continue
                                     change_rate = (prices[i+1] - prices[i]) / prices[i] * 100
                                     st.markdown(f"{contracts[i]} → {contracts[i+1]}: {change_rate:.1f}%")
                                 st.markdown("---")
                         else:
                             st.info("无")
-                    
-                    # 显示Contango结构品种
                     with col2:
                         st.subheader("Contango结构（近弱远强）")
                         if contango_results:
                             for variety, structure, contracts, prices in contango_results:
                                 st.markdown(f"**{variety}**")
-                                # 计算并显示变化率
                                 for i in range(len(contracts)-1):
+                                    if prices[i] == 0:
+                                        continue
                                     change_rate = (prices[i+1] - prices[i]) / prices[i] * 100
                                     st.markdown(f"{contracts[i]} → {contracts[i+1]}: {change_rate:.1f}%")
                                 st.markdown("---")
                         else:
                             st.info("无")
-                    
-                    # 显示统计信息
                     st.markdown("---")
                     st.markdown(f"""
                     ### 统计信息
@@ -307,23 +280,29 @@ def main():
                     'short': retail_short
                 }
                 st.subheader("看多信号")
-                for signal in retail_long:
-                    st.markdown(f"**{signal['contract']}**  强度: {signal['strength']:.2f}  {signal['reason']}")
-                    if signal['seat_details']:
-                        st.markdown("家人席位持仓变化：")
-                        for seat in signal['seat_details']:
-                            st.markdown(f"- {seat['seat_name']}: 多单变化{seat['long_chg']}手, 空单变化{seat['short_chg']}手")
-                    st.markdown("席位明细：")
-                    st.dataframe(signal['raw_df'])
+                if retail_long:
+                    for signal in retail_long:
+                        st.markdown(f"**{signal['contract']}**  强度: {signal['strength']:.2f}  {signal['reason']}")
+                        if signal['seat_details']:
+                            st.markdown("家人席位持仓变化：")
+                            for seat in signal['seat_details']:
+                                st.markdown(f"- {seat['seat_name']}: 多单变化{seat['long_chg']}手, 空单变化{seat['short_chg']}手")
+                        st.markdown("席位明细：")
+                        st.dataframe(signal['raw_df'])
+                else:
+                    st.info("无看多信号")
                 st.subheader("看空信号")
-                for signal in retail_short:
-                    st.markdown(f"**{signal['contract']}**  强度: {signal['strength']:.2f}  {signal['reason']}")
-                    if signal['seat_details']:
-                        st.markdown("家人席位持仓变化：")
-                        for seat in signal['seat_details']:
-                            st.markdown(f"- {seat['seat_name']}: 多单变化{seat['long_chg']}手, 空单变化{seat['short_chg']}手")
-                    st.markdown("席位明细：")
-                    st.dataframe(signal['raw_df'])
+                if retail_short:
+                    for signal in retail_short:
+                        st.markdown(f"**{signal['contract']}**  强度: {signal['strength']:.2f}  {signal['reason']}")
+                        if signal['seat_details']:
+                            st.markdown("家人席位持仓变化：")
+                            for seat in signal['seat_details']:
+                                st.markdown(f"- {seat['seat_name']}: 多单变化{seat['long_chg']}手, 空单变化{seat['short_chg']}手")
+                        st.markdown("席位明细：")
+                        st.dataframe(signal['raw_df'])
+                else:
+                    st.info("无看空信号")
                 st.markdown(f"看多信号品种数量：{len(retail_long)}  看空信号品种数量：{len(retail_short)}")
             
             # 显示策略总结页面
