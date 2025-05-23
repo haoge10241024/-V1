@@ -507,9 +507,42 @@ def main():
                 long_signals = []
                 short_signals = []
                 
+                # 调试信息
+                st.write(f"总合约数量: {len(results)}")
+                
+                # 检查第一个合约的原始数据
+                if results:
+                    first_contract = list(results.keys())[0]
+                    first_data = results[first_contract]['raw_data']
+                    st.write(f"第一个合约 {first_contract} 的席位名称:")
+                    st.write("多单席位:", first_data['long_party_name'].tolist())
+                    st.write("空单席位:", first_data['short_party_name'].tolist())
+                    
+                    # 检查是否有家人席位
+                    retail_seats = ["东方财富", "平安期货", "徽商期货"]
+                    found_retail_long = [seat for seat in first_data['long_party_name'] if seat in retail_seats]
+                    found_retail_short = [seat for seat in first_data['short_party_name'] if seat in retail_seats]
+                    st.write("找到的家人多单席位:", found_retail_long)
+                    st.write("找到的家人空单席位:", found_retail_short)
+                
+                contracts_with_strategy = 0
+                strategy_results_debug = []
+                
                 for contract, data in results.items():
+                    st.write(f"检查合约: {contract}")
+                    st.write(f"可用策略: {list(data['strategies'].keys())}")
+                    
                     if strategy_name in data['strategies']:
+                        contracts_with_strategy += 1
                         strategy_data = data['strategies'][strategy_name]
+                        strategy_results_debug.append({
+                            'contract': contract,
+                            'signal': strategy_data['signal'],
+                            'reason': strategy_data['reason'],
+                            'strength': strategy_data['strength']
+                        })
+                        
+                        st.write(f"策略结果: {strategy_data}")
                         
                         if strategy_data['signal'] == '看多':
                             signal_info = {
@@ -564,6 +597,10 @@ def main():
                             signal_info['seat_details'] = seat_details
                             
                             short_signals.append(signal_info)
+                
+                st.write(f"包含家人席位策略的合约数量: {contracts_with_strategy}")
+                st.write("策略结果调试信息:")
+                st.write(strategy_results_debug)
                 
                 # 存储策略信号数据
                 all_strategy_signals[strategy_name] = {
@@ -621,7 +658,7 @@ def main():
                 ### 统计信息
                 - 看多信号品种数量：{len(long_signals)}
                 - 看空信号品种数量：{len(short_signals)}
-                - 总分析品种数量：{len([contract for contract, data in results.items() if strategy_name in data['strategies']])}
+                - 总分析品种数量：{contracts_with_strategy}
                 """)
             
             # 显示策略总结页面
