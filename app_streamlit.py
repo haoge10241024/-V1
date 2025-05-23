@@ -272,9 +272,12 @@ def main():
                 retail_short = []
                 for contract, data in retail_results.items():
                     if data['signal'] == '看多':
-                        retail_long.append({'contract': contract, 'strength': data['strength'], 'reason': data['reason'], 'seat_details': data['seat_details'], 'raw_df': data['raw_df']})
+                        retail_long.append({'contract': contract, 'strength': data['strength'], 'reason': data['reason'], 'seat_details': data['seat_details'], 'raw_df': data['raw_df'], 'retail_ratio': data.get('retail_ratio', 0)})
                     elif data['signal'] == '看空':
-                        retail_short.append({'contract': contract, 'strength': data['strength'], 'reason': data['reason'], 'seat_details': data['seat_details'], 'raw_df': data['raw_df']})
+                        retail_short.append({'contract': contract, 'strength': data['strength'], 'reason': data['reason'], 'seat_details': data['seat_details'], 'raw_df': data['raw_df'], 'retail_ratio': data.get('retail_ratio', 0)})
+                # 按retail_ratio从大到小排序
+                retail_long.sort(key=lambda x: x['retail_ratio'], reverse=True)
+                retail_short.sort(key=lambda x: x['retail_ratio'], reverse=True)
                 all_strategy_signals['家人席位反向操作策略'] = {
                     'long': retail_long,
                     'short': retail_short
@@ -282,7 +285,7 @@ def main():
                 st.subheader("看多信号")
                 if retail_long:
                     for signal in retail_long:
-                        st.markdown(f"**{signal['contract']}**  强度: {signal['strength']:.2f}  {signal['reason']}")
+                        st.markdown(f"**{signal['contract']}**  强度: {signal['strength']:.2f}  占比: {signal['retail_ratio']:.2%}  {signal['reason']}")
                         if signal['seat_details']:
                             st.markdown("家人席位持仓变化：")
                             for seat in signal['seat_details']:
@@ -294,7 +297,7 @@ def main():
                 st.subheader("看空信号")
                 if retail_short:
                     for signal in retail_short:
-                        st.markdown(f"**{signal['contract']}**  强度: {signal['strength']:.2f}  {signal['reason']}")
+                        st.markdown(f"**{signal['contract']}**  强度: {signal['strength']:.2f}  占比: {signal['retail_ratio']:.2%}  {signal['reason']}")
                         if signal['seat_details']:
                             st.markdown("家人席位持仓变化：")
                             for seat in signal['seat_details']:
@@ -312,39 +315,32 @@ def main():
                 # 获取每个策略的前十名品种
                 strategy_top_10 = {}
                 for strategy_name, signals in all_strategy_signals.items():
-                    # 获取看多和看空的前十名
-                    long_signals = signals['long'][:10]
-                    short_signals = signals['short'][:10]
-                    
-                    # 提取品种代码（去掉交易所前缀和数字）
+                    if strategy_name == '家人席位反向操作策略':
+                        long_signals = sorted(signals['long'], key=lambda x: x['retail_ratio'], reverse=True)[:10]
+                        short_signals = sorted(signals['short'], key=lambda x: x['retail_ratio'], reverse=True)[:10]
+                    else:
+                        long_signals = signals['long'][:10]
+                        short_signals = signals['short'][:10]
                     long_symbols = set()
                     short_symbols = set()
-                    
                     def extract_symbol(contract):
-                        """提取品种代码的函数"""
                         try:
-                            # 分割合约名称
                             parts = contract.split('_')
                             if len(parts) > 1:
-                                # 获取最后一部分（如：cu2505）
                                 symbol_part = parts[-1]
-                                # 提取字母部分
                                 symbol = ''.join(c for c in symbol_part if c.isalpha())
                                 return symbol.lower()
                         except:
                             return None
                         return None
-                    
                     for signal in long_signals:
                         symbol = extract_symbol(signal['contract'])
                         if symbol:
                             long_symbols.add(symbol)
-                    
                     for signal in short_signals:
                         symbol = extract_symbol(signal['contract'])
                         if symbol:
                             short_symbols.add(symbol)
-                    
                     strategy_top_10[strategy_name] = {
                         'long_signals': long_signals,
                         'short_signals': short_signals,
