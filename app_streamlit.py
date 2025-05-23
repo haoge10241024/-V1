@@ -695,6 +695,32 @@ def main():
             with tabs[4]:
                 st.header("策略总结")
                 
+                # 改进的品种提取函数
+                def extract_symbol(contract):
+                    """从合约名称中提取品种代码"""
+                    try:
+                        # 处理各种格式的合约名称
+                        if '_' in contract:
+                            # 处理格式：交易所_合约代码
+                            symbol_part = contract.split('_')[-1]
+                        else:
+                            symbol_part = contract
+                        
+                        # 提取字母部分作为品种代码
+                        symbol = ''.join(c for c in symbol_part if c.isalpha()).upper()
+                        
+                        # 处理特殊情况
+                        if symbol == 'PTA':
+                            return 'PTA'
+                        elif symbol.startswith('TA') and len(symbol) > 2:
+                            return 'TA'
+                        elif symbol == 'OI':
+                            return 'OI'
+                        else:
+                            return symbol
+                    except:
+                        return None
+                
                 # 获取每个策略的前十名品种
                 strategy_top_10 = {}
                 for strategy_name, signals in all_strategy_signals.items():
@@ -704,26 +730,21 @@ def main():
                     else:
                         long_signals = signals['long'][:10]
                         short_signals = signals['short'][:10]
+                    
+                    # 提取品种代码
                     long_symbols = set()
                     short_symbols = set()
-                    def extract_symbol(contract):
-                        try:
-                            parts = contract.split('_')
-                            if len(parts) > 1:
-                                symbol_part = parts[-1]
-                                symbol = ''.join(c for c in symbol_part if c.isalpha())
-                                return symbol.lower()
-                        except:
-                            return None
-                        return None
+                    
                     for signal in long_signals:
                         symbol = extract_symbol(signal['contract'])
                         if symbol:
                             long_symbols.add(symbol)
+                    
                     for signal in short_signals:
                         symbol = extract_symbol(signal['contract'])
                         if symbol:
                             short_symbols.add(symbol)
+                    
                     strategy_top_10[strategy_name] = {
                         'long_signals': long_signals,
                         'short_signals': short_signals,
@@ -731,40 +752,75 @@ def main():
                         'short_symbols': short_symbols
                     }
                 
-                # 找出三策略共同看多/看空品种
-                if len(strategy_top_10) >= 3:
-                    common_long = set.intersection(*[data['long_symbols'] for data in strategy_top_10.values()])
-                    common_short = set.intersection(*[data['short_symbols'] for data in strategy_top_10.values()])
-                else:
-                    common_long = set()
-                    common_short = set()
+                # 统计每个品种在多个策略中的出现次数
+                long_symbol_count = {}
+                short_symbol_count = {}
+                
+                # 统计看多信号中的品种
+                for strategy_name, data in strategy_top_10.items():
+                    for symbol in data['long_symbols']:
+                        if symbol not in long_symbol_count:
+                            long_symbol_count[symbol] = {'count': 0, 'strategies': []}
+                        long_symbol_count[symbol]['count'] += 1
+                        long_symbol_count[symbol]['strategies'].append(strategy_name)
+                
+                # 统计看空信号中的品种
+                for strategy_name, data in strategy_top_10.items():
+                    for symbol in data['short_symbols']:
+                        if symbol not in short_symbol_count:
+                            short_symbol_count[symbol] = {'count': 0, 'strategies': []}
+                        short_symbol_count[symbol]['count'] += 1
+                        short_symbol_count[symbol]['strategies'].append(strategy_name)
+                
+                # 筛选出现在两个及以上策略中的品种
+                common_long_symbols = {symbol: info for symbol, info in long_symbol_count.items() if info['count'] >= 2}
+                common_short_symbols = {symbol: info for symbol, info in short_symbol_count.items() if info['count'] >= 2}
                 
                 # 显示共同信号
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    st.subheader("共同看多品种")
-                    if common_long:
-                        for symbol in sorted(common_long):
+                    st.subheader("信号共振看多品种")
+                    if common_long_symbols:
+                        # 按出现次数排序
+                        sorted_long = sorted(common_long_symbols.items(), key=lambda x: x[1]['count'], reverse=True)
+                        for symbol, info in sorted_long:
+                            strategies_text = "、".join(info['strategies'])
                             st.markdown(f"""
                             <div style='background-color: #e6ffe6; padding: 10px; border-radius: 5px; margin: 5px 0;'>
-                                <strong>{symbol}</strong>
+                                <strong>{symbol}</strong> 
+                                <span style='color: #666; font-size: 0.9em;'>({info['count']}个策略)</span><br>
+                                <span style='font-size: 0.8em; color: #888;'>策略: {strategies_text}</span>
                             </div>
                             """, unsafe_allow_html=True)
                     else:
-                        st.info("没有共同看多的品种")
+                        st.info("没有信号共振的看多品种")
                 
                 with col2:
-                    st.subheader("共同看空品种")
-                    if common_short:
-                        for symbol in sorted(common_short):
+                    st.subheader("信号共振看空品种")
+                    if common_short_symbols:
+                        # 按出现次数排序
+                        sorted_short = sorted(common_short_symbols.items(), key=lambda x: x[1]['count'], reverse=True)
+                        for symbol, info in sorted_short:
+                            strategies_text = "、".join(info['strategies'])
                             st.markdown(f"""
                             <div style='background-color: #ffe6e6; padding: 10px; border-radius: 5px; margin: 5px 0;'>
-                                <strong>{symbol}</strong>
+                                <strong>{symbol}</strong> 
+                                <span style='color: #666; font-size: 0.9em;'>({info['count']}个策略)</span><br>
+                                <span style='font-size: 0.8em; color: #888;'>策略: {strategies_text}</span>
                             </div>
                             """, unsafe_allow_html=True)
                     else:
-                        st.info("没有共同看空的品种")
+                        st.info("没有信号共振的看空品种")
+                
+                # 统计信息
+                st.markdown("---")
+                st.markdown(f"""
+                ### 信号共振统计
+                - 看多信号共振品种数量：{len(common_long_symbols)}
+                - 看空信号共振品种数量：{len(common_short_symbols)}
+                - 总参与策略数量：{len(strategy_top_10)}
+                """)
                 
                 # 显示每个策略的前十名
                 st.markdown("---")
@@ -777,9 +833,14 @@ def main():
                     with col1:
                         st.markdown("**看多品种**")
                         for signal in data['long_signals']:
+                            # 检查该品种是否有信号共振
+                            symbol = extract_symbol(signal['contract'])
+                            is_resonance = symbol in common_long_symbols if symbol else False
+                            resonance_badge = " 🔥" if is_resonance else ""
+                            
                             st.markdown(f"""
                             <div style='background-color: #e6ffe6; padding: 10px; border-radius: 5px; margin: 5px 0;'>
-                                <strong>{signal['contract']}</strong><br>
+                                <strong>{signal['contract']}{resonance_badge}</strong><br>
                                 强度: {signal['strength']:.2f}<br>
                                 {signal['reason']}
                             </div>
@@ -788,9 +849,14 @@ def main():
                     with col2:
                         st.markdown("**看空品种**")
                         for signal in data['short_signals']:
+                            # 检查该品种是否有信号共振
+                            symbol = extract_symbol(signal['contract'])
+                            is_resonance = symbol in common_short_symbols if symbol else False
+                            resonance_badge = " 🔥" if is_resonance else ""
+                            
                             st.markdown(f"""
                             <div style='background-color: #ffe6e6; padding: 10px; border-radius: 5px; margin: 5px 0;'>
-                                <strong>{signal['contract']}</strong><br>
+                                <strong>{signal['contract']}{resonance_badge}</strong><br>
                                 强度: {signal['strength']:.2f}<br>
                                 {signal['reason']}
                             </div>
@@ -833,12 +899,12 @@ def main():
                 
                 # 写入共同信号
                 common_signals = []
-                for symbol in common_long:
+                for symbol in common_long_symbols:
                     common_signals.append({
                         '品种': symbol,
                         '信号类型': '共同看多'
                     })
-                for symbol in common_short:
+                for symbol in common_short_symbols:
                     common_signals.append({
                         '品种': symbol,
                         '信号类型': '共同看空'
@@ -884,10 +950,10 @@ def main():
             text_output.write("\n共同信号\n")
             text_output.write("-" * 20 + "\n")
             text_output.write("共同看多品种:\n")
-            for symbol in sorted(common_long):
+            for symbol in sorted(common_long_symbols):
                 text_output.write(f"- {symbol}\n")
             text_output.write("\n共同看空品种:\n")
-            for symbol in sorted(common_short):
+            for symbol in sorted(common_short_symbols):
                 text_output.write(f"- {symbol}\n")
             
             # 写入期限结构分析结果
