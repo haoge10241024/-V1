@@ -8,6 +8,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
 import io
+from retail_reverse_strategy import analyze_all_positions  # 新增导入
 
 # 设置页面配置
 st.set_page_config(
@@ -76,20 +77,17 @@ def main():
         with st.spinner("正在分析数据..."):
             # 获取分析结果
             results = get_analysis_results(trade_date_str)
-            
             if not results:
                 st.error("获取数据失败，请检查日期是否有效")
                 return
-            
+            # 获取家人席位反向操作策略结果
+            retail_results = analyze_all_positions("data")
             # 生成图表
             charts = generate_charts(results)
-            
-            # 为每个策略创建标签页，并添加策略总结标签页
-            tabs = st.tabs(["多空力量变化策略", "蜘蛛网策略", "期限结构分析", "策略总结"])
-            
+            # 为每个策略创建标签页，并添加策略总结标签页和家人席位反向操作策略页
+            tabs = st.tabs(["多空力量变化策略", "蜘蛛网策略", "期限结构分析", "家人席位反向操作策略", "策略总结"])
             # 存储所有策略的信号数据
             all_strategy_signals = {}
-            
             # 显示每个策略的结果
             for i, strategy_name in enumerate(["多空力量变化策略", "蜘蛛网策略"]):
                 with tabs[i]:
@@ -294,8 +292,42 @@ def main():
                 else:
                     st.warning("没有可用的期限结构数据")
             
-            # 显示策略总结页面
+            # 显示家人席位反向操作策略页面
             with tabs[3]:
+                st.header("家人席位反向操作策略")
+                retail_long = []
+                retail_short = []
+                for contract, data in retail_results.items():
+                    if data['signal'] == '看多':
+                        retail_long.append({'contract': contract, 'strength': data['strength'], 'reason': data['reason'], 'seat_details': data['seat_details'], 'raw_df': data['raw_df']})
+                    elif data['signal'] == '看空':
+                        retail_short.append({'contract': contract, 'strength': data['strength'], 'reason': data['reason'], 'seat_details': data['seat_details'], 'raw_df': data['raw_df']})
+                all_strategy_signals['家人席位反向操作策略'] = {
+                    'long': retail_long,
+                    'short': retail_short
+                }
+                st.subheader("看多信号")
+                for signal in retail_long:
+                    st.markdown(f"**{signal['contract']}**  强度: {signal['strength']:.2f}  {signal['reason']}")
+                    if signal['seat_details']:
+                        st.markdown("家人席位持仓变化：")
+                        for seat in signal['seat_details']:
+                            st.markdown(f"- {seat['seat_name']}: 多单变化{seat['long_chg']}手, 空单变化{seat['short_chg']}手")
+                    st.markdown("席位明细：")
+                    st.dataframe(signal['raw_df'])
+                st.subheader("看空信号")
+                for signal in retail_short:
+                    st.markdown(f"**{signal['contract']}**  强度: {signal['strength']:.2f}  {signal['reason']}")
+                    if signal['seat_details']:
+                        st.markdown("家人席位持仓变化：")
+                        for seat in signal['seat_details']:
+                            st.markdown(f"- {seat['seat_name']}: 多单变化{seat['long_chg']}手, 空单变化{seat['short_chg']}手")
+                    st.markdown("席位明细：")
+                    st.dataframe(signal['raw_df'])
+                st.markdown(f"看多信号品种数量：{len(retail_long)}  看空信号品种数量：{len(retail_short)}")
+            
+            # 显示策略总结页面
+            with tabs[4]:
                 st.header("策略总结")
                 
                 # 获取每个策略的前十名品种
@@ -341,10 +373,13 @@ def main():
                         'short_symbols': short_symbols
                     }
                 
-                # 找出共同看多的品种
-                common_long = set.intersection(*[data['long_symbols'] for data in strategy_top_10.values()])
-                # 找出共同看空的品种
-                common_short = set.intersection(*[data['short_symbols'] for data in strategy_top_10.values()])
+                # 找出三策略共同看多/看空品种
+                if len(strategy_top_10) >= 3:
+                    common_long = set.intersection(*[data['long_symbols'] for data in strategy_top_10.values()])
+                    common_short = set.intersection(*[data['short_symbols'] for data in strategy_top_10.values()])
+                else:
+                    common_long = set()
+                    common_short = set()
                 
                 # 显示共同信号
                 col1, col2 = st.columns(2)
