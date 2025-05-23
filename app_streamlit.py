@@ -232,6 +232,16 @@ def main():
             
             # 显示多空力量变化策略
             with tabs[0]:
+                st.header("多空力量变化策略")
+                
+                # 策略原理说明
+                st.info("""
+                **策略原理：**
+                多空力量变化策略通过分析席位持仓的增减变化来判断市场趋势。当多头席位大幅增仓而空头席位减仓时，
+                表明市场看多情绪浓厚，产生看多信号；反之，当空头席位大幅增仓而多头席位减仓时，产生看空信号。
+                信号强度=|多头持仓变化|+|空头持仓变化|，变化越大，信号越强。
+                """)
+                
                 strategy_name = "多空力量变化策略"
                 long_signals = []
                 short_signals = []
@@ -330,6 +340,16 @@ def main():
             
             # 显示蜘蛛网策略
             with tabs[1]:
+                st.header("蜘蛛网策略")
+                
+                # 策略原理说明
+                st.info("""
+                **策略原理：**
+                蜘蛛网策略基于持仓分布的分化程度判断机构资金的参与情况。通过计算MSD（Mean Square Deviation）指标，
+                衡量各席位持仓与平均持仓的偏离程度。当MSD > 0时，表明机构资金（知情者）看多；当MSD < 0时，表明机构资金看空。
+                MSD绝对值越大，机构资金的态度越明确，信号强度越高。该策略假设机构投资者具有更准确的市场信息。
+                """)
+                
                 strategy_name = "蜘蛛网策略"
                 long_signals = []
                 short_signals = []
@@ -429,6 +449,14 @@ def main():
             # 显示家人席位反向操作策略
             with tabs[2]:
                 st.header("家人席位反向操作策略")
+                
+                # 策略原理说明
+                st.info("""
+                **策略原理：**
+                家人席位反向操作策略基于散户投资者往往在市场顶部做多、底部做空的特点，采用反向操作思路。
+                策略跟踪特定散户席位（东方财富、平安期货、徽商期货等）的持仓变化，当这些席位增加多单时产生看空信号，
+                增加空单时产生看多信号。持仓占比越高，信号强度越大。该策略基于"聪明钱与散户资金相反操作"的市场规律。
+                """)
                 
                 # 直接分析家人席位策略
                 retail_long_signals = []
@@ -560,6 +588,16 @@ def main():
             # 显示期限结构分析页面
             with tabs[3]:
                 st.header("期限结构分析")
+                
+                # 策略原理说明
+                st.info("""
+                **策略原理：**
+                期限结构分析通过比较同一品种不同交割月份合约的价格关系，判断市场对该品种未来供需的预期。
+                Back结构（近强远弱）：近月合约价格高于远月，通常表明当前供应紧张，可能看多现货、看空远期；
+                Contango结构（近弱远强）：远月合约价格高于近月，通常表明当前供应充足但预期未来需求增长，可能看空现货、看多远期。
+                期限结构的变化往往预示着供需基本面的转变。
+                """)
+                
                 st.info("基于真实期货合约收盘价进行期限结构分析")
                 
                 try:
@@ -815,7 +853,7 @@ def main():
                         for symbol, info in sorted_long:
                             strategies_text = "、".join(info['strategies'])
                             st.markdown(f"""
-                            <div style='background-color: #e6ffe6; padding: 10px; border-radius: 5px; margin: 5px 0;'>
+                            <div style='background-color: #ffe6e6; padding: 10px; border-radius: 5px; margin: 5px 0;'>
                                 <strong>{symbol}</strong> 
                                 <span style='color: #666; font-size: 0.9em;'>({info['count']}个策略)</span><br>
                                 <span style='font-size: 0.8em; color: #888;'>策略: {strategies_text}</span>
@@ -832,7 +870,7 @@ def main():
                         for symbol, info in sorted_short:
                             strategies_text = "、".join(info['strategies'])
                             st.markdown(f"""
-                            <div style='background-color: #ffe6e6; padding: 10px; border-radius: 5px; margin: 5px 0;'>
+                            <div style='background-color: #e6ffe6; padding: 10px; border-radius: 5px; margin: 5px 0;'>
                                 <strong>{symbol}</strong> 
                                 <span style='color: #666; font-size: 0.9em;'>({info['count']}个策略)</span><br>
                                 <span style='font-size: 0.8em; color: #888;'>策略: {strategies_text}</span>
@@ -867,7 +905,7 @@ def main():
                             resonance_badge = " 🔥" if is_resonance else ""
                             
                             st.markdown(f"""
-                            <div style='background-color: #e6ffe6; padding: 10px; border-radius: 5px; margin: 5px 0;'>
+                            <div style='background-color: #ffe6e6; padding: 10px; border-radius: 5px; margin: 5px 0;'>
                                 <strong>{signal['contract']}{resonance_badge}</strong><br>
                                 强度: {signal['strength']:.2f}<br>
                                 {signal['reason']}
@@ -883,7 +921,7 @@ def main():
                             resonance_badge = " 🔥" if is_resonance else ""
                             
                             st.markdown(f"""
-                            <div style='background-color: #ffe6e6; padding: 10px; border-radius: 5px; margin: 5px 0;'>
+                            <div style='background-color: #e6ffe6; padding: 10px; border-radius: 5px; margin: 5px 0;'>
                                 <strong>{signal['contract']}{resonance_badge}</strong><br>
                                 强度: {signal['strength']:.2f}<br>
                                 {signal['reason']}
