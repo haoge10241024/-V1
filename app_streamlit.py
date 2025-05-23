@@ -272,12 +272,12 @@ def main():
                 retail_short = []
                 for contract, data in retail_results.items():
                     if data['signal'] == '看多':
-                        retail_long.append({'contract': contract, 'strength': data['strength'], 'reason': data['reason'], 'seat_details': data['seat_details'], 'raw_df': data['raw_df'], 'retail_ratio': data.get('retail_ratio', 0)})
+                        retail_long.append({'contract': contract, 'strength': data['strength'], 'reason': data['reason'], 'seat_details': data['seat_details'], 'raw_df': data['raw_df'], 'retail_ratio': float(data.get('retail_ratio', 0))})
                     elif data['signal'] == '看空':
-                        retail_short.append({'contract': contract, 'strength': data['strength'], 'reason': data['reason'], 'seat_details': data['seat_details'], 'raw_df': data['raw_df'], 'retail_ratio': data.get('retail_ratio', 0)})
-                # 按retail_ratio从大到小排序
-                retail_long.sort(key=lambda x: x['retail_ratio'], reverse=True)
-                retail_short.sort(key=lambda x: x['retail_ratio'], reverse=True)
+                        retail_short.append({'contract': contract, 'strength': data['strength'], 'reason': data['reason'], 'seat_details': data['seat_details'], 'raw_df': data['raw_df'], 'retail_ratio': float(data.get('retail_ratio', 0))})
+                # 严格按retail_ratio从大到小排序
+                retail_long = sorted(retail_long, key=lambda x: x['retail_ratio'], reverse=True)
+                retail_short = sorted(retail_short, key=lambda x: x['retail_ratio'], reverse=True)
                 all_strategy_signals['家人席位反向操作策略'] = {
                     'long': retail_long,
                     'short': retail_short
