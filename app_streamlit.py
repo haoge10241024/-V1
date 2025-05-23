@@ -276,16 +276,16 @@ def main():
                     elif data['signal'] == '看空':
                         retail_short.append({'contract': contract, 'strength': data['strength'], 'reason': data['reason'], 'seat_details': data['seat_details'], 'raw_df': data['raw_df'], 'retail_ratio': float(data.get('retail_ratio', 0))})
                 # 严格按retail_ratio从大到小排序
-                retail_long = sorted(retail_long, key=lambda x: x['retail_ratio'], reverse=True)
-                retail_short = sorted(retail_short, key=lambda x: x['retail_ratio'], reverse=True)
+                retail_long = sorted(retail_long, key=lambda x: float(x['retail_ratio']), reverse=True)
+                retail_short = sorted(retail_short, key=lambda x: float(x['retail_ratio']), reverse=True)
                 all_strategy_signals['家人席位反向操作策略'] = {
                     'long': retail_long,
                     'short': retail_short
                 }
                 st.subheader("看多信号")
                 if retail_long:
-                    for signal in retail_long:
-                        st.markdown(f"**{signal['contract']}**  强度: {signal['strength']:.2f}  占比: {signal['retail_ratio']:.2%}  {signal['reason']}")
+                    for idx, signal in enumerate(retail_long, 1):
+                        st.markdown(f"{idx}. **{signal['contract']}**  强度: {signal['strength']:.2f}  占比: {signal['retail_ratio']:.2%}  {signal['reason']}")
                         if signal['seat_details']:
                             st.markdown("家人席位持仓变化：")
                             for seat in signal['seat_details']:
@@ -296,8 +296,8 @@ def main():
                     st.info("无看多信号")
                 st.subheader("看空信号")
                 if retail_short:
-                    for signal in retail_short:
-                        st.markdown(f"**{signal['contract']}**  强度: {signal['strength']:.2f}  占比: {signal['retail_ratio']:.2%}  {signal['reason']}")
+                    for idx, signal in enumerate(retail_short, 1):
+                        st.markdown(f"{idx}. **{signal['contract']}**  强度: {signal['strength']:.2f}  占比: {signal['retail_ratio']:.2%}  {signal['reason']}")
                         if signal['seat_details']:
                             st.markdown("家人席位持仓变化：")
                             for seat in signal['seat_details']:
@@ -316,8 +316,8 @@ def main():
                 strategy_top_10 = {}
                 for strategy_name, signals in all_strategy_signals.items():
                     if strategy_name == '家人席位反向操作策略':
-                        long_signals = sorted(signals['long'], key=lambda x: x['retail_ratio'], reverse=True)[:10]
-                        short_signals = sorted(signals['short'], key=lambda x: x['retail_ratio'], reverse=True)[:10]
+                        long_signals = sorted(signals['long'], key=lambda x: float(x['retail_ratio']), reverse=True)[:10]
+                        short_signals = sorted(signals['short'], key=lambda x: float(x['retail_ratio']), reverse=True)[:10]
                     else:
                         long_signals = signals['long'][:10]
                         short_signals = signals['short'][:10]
