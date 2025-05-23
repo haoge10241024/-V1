@@ -195,8 +195,22 @@ def main():
                     if 'raw_data' in data:
                         df = pd.DataFrame(data['raw_data'])
                         if not df.empty:
-                            df['variety'] = contract.split('_')[-1][:2].lower()
-                            term_structure_data.append(df)
+                            # 提取品种名和合约代码
+                            contract_parts = contract.split('_')
+                            if len(contract_parts) > 1:
+                                variety = ''.join([c for c in contract_parts[-1] if c.isalpha()]).lower()
+                                symbol = contract_parts[-1]
+                                df['variety'] = variety
+                                df['symbol'] = symbol
+                                # 只保留有结算价/收盘价/price字段的行
+                                price_col = None
+                                for col in ['settle', 'close', 'price', '结算价', '收盘价']:
+                                    if col in df.columns:
+                                        price_col = col
+                                        break
+                                if price_col:
+                                    df['price'] = df[price_col]
+                                    term_structure_data.append(df[['variety', 'symbol', 'price']])
                 if term_structure_data:
                     # 合并所有数据
                     all_data = pd.concat(term_structure_data, ignore_index=True)
@@ -204,54 +218,67 @@ def main():
                     results_list = []
                     for variety in all_data['variety'].unique():
                         variety_data = all_data[all_data['variety'] == variety].copy()
-                        required_columns = ['symbol', 'long_open_interest', 'short_open_interest']
-                        if not all(col in variety_data.columns for col in required_columns):
+                        if 'symbol' not in variety_data.columns or 'price' not in variety_data.columns:
                             continue
-                        variety_data = variety_data.sort_values('symbol')
-                        variety_data['price_indicator'] = variety_data['long_open_interest'] + variety_data['short_open_interest']
+                        # 合约排序：按symbol中的数字部分升序
+                        def extract_month(x):
+                            digits = ''.join([c for c in x if c.isdigit()])
+                            return int(digits) if digits else 0
+                        variety_data = variety_data.dropna(subset=['price'])
+                        variety_data['price'] = pd.to_numeric(variety_data['price'], errors='coerce')
+                        variety_data = variety_data.dropna(subset=['price'])
+                        if len(variety_data) < 3:
+                            continue
+                        variety_data = variety_data.sort_values('symbol', key=lambda x: x.map(extract_month))
                         contracts = variety_data['symbol'].tolist()
-                        prices = variety_data['price_indicator'].tolist()
-                        if len(contracts) < 3:
-                            continue
+                        prices = variety_data['price'].tolist()
                         price_changes = []
                         for i in range(len(prices)-1):
                             if prices[i] == 0:
-                                continue  # 跳过分母为0的情况，防止ZeroDivisionError
+                                continue
                             change_rate = (prices[i+1] - prices[i]) / prices[i]
                             price_changes.append(change_rate)
+                        if len(price_changes) != len(prices)-1:
+                            continue
                         if price_changes and all(rate < -0.05 for rate in price_changes):
                             structure = "back"
                         elif price_changes and all(rate > 0.05 for rate in price_changes):
                             structure = "contango"
                         else:
                             continue
-                        results_list.append((variety, structure, contracts, prices))
+                        results_list.append((variety, structure, contracts, prices, price_changes))
                     back_results = [r for r in results_list if r[1] == "back"]
                     contango_results = [r for r in results_list if r[1] == "contango"]
                     col1, col2 = st.columns(2)
                     with col1:
                         st.subheader("Back结构（近强远弱）")
                         if back_results:
-                            for variety, structure, contracts, prices in back_results:
+                            for variety, structure, contracts, prices, price_changes in back_results:
                                 st.markdown(f"**{variety}**")
                                 for i in range(len(contracts)-1):
                                     if prices[i] == 0:
                                         continue
                                     change_rate = (prices[i+1] - prices[i]) / prices[i] * 100
                                     st.markdown(f"{contracts[i]} → {contracts[i+1]}: {change_rate:.1f}%")
+                                st.markdown(f"合约顺序: {contracts}")
+                                st.markdown(f"价格: {prices}")
+                                st.markdown(f"变化率: {[f'{r*100:.1f}%' for r in price_changes]}")
                                 st.markdown("---")
                         else:
                             st.info("无")
                     with col2:
                         st.subheader("Contango结构（近弱远强）")
                         if contango_results:
-                            for variety, structure, contracts, prices in contango_results:
+                            for variety, structure, contracts, prices, price_changes in contango_results:
                                 st.markdown(f"**{variety}**")
                                 for i in range(len(contracts)-1):
                                     if prices[i] == 0:
                                         continue
                                     change_rate = (prices[i+1] - prices[i]) / prices[i] * 100
                                     st.markdown(f"{contracts[i]} → {contracts[i+1]}: {change_rate:.1f}%")
+                                st.markdown(f"合约顺序: {contracts}")
+                                st.markdown(f"价格: {prices}")
+                                st.markdown(f"变化率: {[f'{r*100:.1f}%' for r in price_changes]}")
                                 st.markdown("---")
                         else:
                             st.info("无")
@@ -271,13 +298,18 @@ def main():
                 retail_long = []
                 retail_short = []
                 for contract, data in retail_results.items():
+                    ratio_long = data.get('retail_ratio', 0)
+                    try:
+                        ratio_long = float(ratio_long) if ratio_long is not None else 0.0
+                    except Exception:
+                        ratio_long = 0.0
                     if data['signal'] == '看多':
-                        retail_long.append({'contract': contract, 'strength': data['strength'], 'reason': data['reason'], 'seat_details': data['seat_details'], 'raw_df': data['raw_df'], 'retail_ratio': float(data.get('retail_ratio', 0))})
+                        retail_long.append({'contract': contract, 'strength': data['strength'], 'reason': data['reason'], 'seat_details': data['seat_details'], 'raw_df': data['raw_df'], 'retail_ratio': ratio_long})
                     elif data['signal'] == '看空':
-                        retail_short.append({'contract': contract, 'strength': data['strength'], 'reason': data['reason'], 'seat_details': data['seat_details'], 'raw_df': data['raw_df'], 'retail_ratio': float(data.get('retail_ratio', 0))})
-                # 严格按retail_ratio从大到小排序
-                retail_long = sorted(retail_long, key=lambda x: float(x['retail_ratio']), reverse=True)
-                retail_short = sorted(retail_short, key=lambda x: float(x['retail_ratio']), reverse=True)
+                        retail_short.append({'contract': contract, 'strength': data['strength'], 'reason': data['reason'], 'seat_details': data['seat_details'], 'raw_df': data['raw_df'], 'retail_ratio': ratio_long})
+                # 严格按retail_ratio从大到小排序，确保为float
+                retail_long = sorted(retail_long, key=lambda x: float(x['retail_ratio'] or 0), reverse=True)
+                retail_short = sorted(retail_short, key=lambda x: float(x['retail_ratio'] or 0), reverse=True)
                 all_strategy_signals['家人席位反向操作策略'] = {
                     'long': retail_long,
                     'short': retail_short
@@ -316,8 +348,8 @@ def main():
                 strategy_top_10 = {}
                 for strategy_name, signals in all_strategy_signals.items():
                     if strategy_name == '家人席位反向操作策略':
-                        long_signals = sorted(signals['long'], key=lambda x: float(x['retail_ratio']), reverse=True)[:10]
-                        short_signals = sorted(signals['short'], key=lambda x: float(x['retail_ratio']), reverse=True)[:10]
+                        long_signals = sorted(signals['long'], key=lambda x: float(x['retail_ratio'] or 0), reverse=True)[:10]
+                        short_signals = sorted(signals['short'], key=lambda x: float(x['retail_ratio'] or 0), reverse=True)[:10]
                     else:
                         long_signals = signals['long'][:10]
                         short_signals = signals['short'][:10]
@@ -512,14 +544,14 @@ def main():
             text_output.write("-" * 20 + "\n")
             
             text_output.write("\nBack结构品种（近强远弱）:\n")
-            for variety, structure, contracts, prices in back_results:
+            for variety, structure, contracts, prices, price_changes in back_results:
                 text_output.write(f"\n品种: {variety}\n")
                 text_output.write("合约持仓详情:\n")
                 for contract, price in zip(contracts, prices):
                     text_output.write(f"  {contract}: {price:.0f}\n")
             
             text_output.write("\nContango结构品种（近弱远强）:\n")
-            for variety, structure, contracts, prices in contango_results:
+            for variety, structure, contracts, prices, price_changes in contango_results:
                 text_output.write(f"\n品种: {variety}\n")
                 text_output.write("合约持仓详情:\n")
                 for contract, price in zip(contracts, prices):
