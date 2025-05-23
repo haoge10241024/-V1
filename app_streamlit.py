@@ -716,6 +716,12 @@ def main():
                             return 'TA'
                         elif symbol == 'OI':
                             return 'OI'
+                        elif symbol.lower() in ['cu', 'al', 'zn', 'pb', 'ni', 'sn', 'au', 'ag', 'rb', 'wr', 'hc', 'ss', 'fu', 'bu', 'ru', 'nr', 'sp', 'lu', 'bc', 'ao', 'ec']:
+                            # 上期所品种保持小写转大写
+                            return symbol.upper()
+                        elif symbol.lower() in ['si', 'ps']:
+                            # 广期所品种
+                            return symbol.upper()
                         else:
                             return symbol
                     except:
@@ -723,6 +729,9 @@ def main():
                 
                 # 获取每个策略的前十名品种
                 strategy_top_10 = {}
+                # 添加调试信息
+                debug_info = {}
+                
                 for strategy_name, signals in all_strategy_signals.items():
                     if strategy_name == '家人席位反向操作策略':
                         long_signals = sorted(signals['long'], key=lambda x: float(x['strength'] or 0), reverse=True)[:10]
@@ -735,13 +744,20 @@ def main():
                     long_symbols = set()
                     short_symbols = set()
                     
+                    # 调试信息
+                    debug_info[strategy_name] = {'long_contracts': [], 'long_symbols': [], 'short_contracts': [], 'short_symbols': []}
+                    
                     for signal in long_signals:
                         symbol = extract_symbol(signal['contract'])
+                        debug_info[strategy_name]['long_contracts'].append(signal['contract'])
+                        debug_info[strategy_name]['long_symbols'].append(symbol)
                         if symbol:
                             long_symbols.add(symbol)
                     
                     for signal in short_signals:
                         symbol = extract_symbol(signal['contract'])
+                        debug_info[strategy_name]['short_contracts'].append(signal['contract'])
+                        debug_info[strategy_name]['short_symbols'].append(symbol)
                         if symbol:
                             short_symbols.add(symbol)
                     
@@ -751,6 +767,18 @@ def main():
                         'long_symbols': long_symbols,
                         'short_symbols': short_symbols
                     }
+                
+                # 调试信息显示
+                with st.expander("调试信息：品种提取结果"):
+                    for strategy_name, info in debug_info.items():
+                        st.write(f"**{strategy_name}**")
+                        st.write("看多合约和品种：")
+                        for contract, symbol in zip(info['long_contracts'], info['long_symbols']):
+                            st.write(f"  {contract} -> {symbol}")
+                        st.write("看空合约和品种：")
+                        for contract, symbol in zip(info['short_contracts'], info['short_symbols']):
+                            st.write(f"  {contract} -> {symbol}")
+                        st.write("---")
                 
                 # 统计每个品种在多个策略中的出现次数
                 long_symbol_count = {}
