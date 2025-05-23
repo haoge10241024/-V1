@@ -108,6 +108,12 @@ def analyze_term_structure_with_prices(df):
             # 按合约代码排序
             variety_data = variety_data.sort_values('symbol')
             
+            # 过滤掉价格为0或空值的数据
+            variety_data = variety_data[
+                (variety_data['close'] > 0) & 
+                (variety_data['close'].notna())
+            ]
+            
             # 获取合约列表和对应的收盘价
             contracts = variety_data['symbol'].tolist()
             closes = variety_data['close'].tolist()
@@ -159,7 +165,7 @@ def main():
                 st.error("获取数据失败，请检查日期是否有效")
                 return
             # 获取家人席位反向操作策略结果
-            retail_results = analyze_all_positions("data")
+            retail_results = analyze_all_positions(".")
             # 生成图表
             charts = generate_charts(results)
             # 为每个策略创建标签页，并添加策略总结标签页和家人席位反向操作策略页
@@ -269,117 +275,164 @@ def main():
                 st.header("期限结构分析")
                 st.info("基于真实期货合约收盘价进行期限结构分析")
                 
-                # 获取期货行情数据
-                with st.spinner("正在获取期货行情数据..."):
-                    price_data = get_futures_price_data(trade_date_str)
-                
-                if not price_data.empty:
-                    # 分析期限结构
-                    structure_results = analyze_term_structure_with_prices(price_data)
+                try:
+                    # 获取期货行情数据
+                    with st.spinner("正在获取期货行情数据..."):
+                        price_data = get_futures_price_data(trade_date_str)
                     
-                    if structure_results:
-                        # 按期限结构类型分类
-                        back_results = [r for r in structure_results if r[1] == "back"]
-                        contango_results = [r for r in structure_results if r[1] == "contango"]
-                        flat_results = [r for r in structure_results if r[1] == "flat"]
+                    if not price_data.empty:
+                        # 分析期限结构
+                        structure_results = analyze_term_structure_with_prices(price_data)
                         
-                        # 创建三列布局
-                        col1, col2, col3 = st.columns(3)
-                        
-                        with col1:
-                            st.subheader("Back结构（近强远弱）")
-                            if back_results:
-                                for variety, structure, contracts, closes in back_results:
-                                    st.markdown(f"**{variety}**")
-                                    price_df = pd.DataFrame({
-                                        '合约': contracts,
-                                        '收盘价': closes,
-                                        '变化': [''] + [f'{((closes[i+1]-closes[i])/closes[i]*100):+.2f}%' for i in range(len(closes)-1)]
-                                    })
-                                    st.dataframe(price_df, use_container_width=True)
-                                    st.markdown("---")
-                            else:
-                                st.info("无Back结构品种")
-                        
-                        with col2:
-                            st.subheader("Contango结构（近弱远强）")
-                            if contango_results:
-                                for variety, structure, contracts, closes in contango_results:
-                                    st.markdown(f"**{variety}**")
-                                    price_df = pd.DataFrame({
-                                        '合约': contracts,
-                                        '收盘价': closes,
-                                        '变化': [''] + [f'{((closes[i+1]-closes[i])/closes[i]*100):+.2f}%' for i in range(len(closes)-1)]
-                                    })
-                                    st.dataframe(price_df, use_container_width=True)
-                                    st.markdown("---")
-                            else:
-                                st.info("无Contango结构品种")
-                        
-                        with col3:
-                            st.subheader("Flat结构（价格相近）")
-                            if flat_results:
-                                for variety, structure, contracts, closes in flat_results:
-                                    st.markdown(f"**{variety}**")
-                                    price_df = pd.DataFrame({
-                                        '合约': contracts,
-                                        '收盘价': closes,
-                                        '变化': [''] + [f'{((closes[i+1]-closes[i])/closes[i]*100):+.2f}%' for i in range(len(closes)-1)]
-                                    })
-                                    st.dataframe(price_df, use_container_width=True)
-                                    st.markdown("---")
-                            else:
-                                st.info("无Flat结构品种")
-                        
-                        # 统计信息
-                        st.markdown("---")
-                        st.markdown(f"""
-                        ### 统计信息
-                        - Back结构品种数量: {len(back_results)}
-                        - Contango结构品种数量: {len(contango_results)}
-                        - Flat结构品种数量: {len(flat_results)}
-                        - 总品种数量: {len(structure_results)}
-                        """)
-                        
-                        # 创建期限结构图表
-                        if back_results or contango_results:
-                            fig = go.Figure()
+                        if structure_results:
+                            # 按期限结构类型分类
+                            back_results = [r for r in structure_results if r[1] == "back"]
+                            contango_results = [r for r in structure_results if r[1] == "contango"]
+                            flat_results = [r for r in structure_results if r[1] == "flat"]
                             
-                            # 添加Back结构品种的图表
-                            for variety, structure, contracts, closes in back_results:
-                                fig.add_trace(go.Scatter(
-                                    x=contracts,
-                                    y=closes,
-                                    mode='lines+markers',
-                                    name=f'{variety} (Back)',
-                                    line=dict(color='red', width=2),
-                                    marker=dict(size=6)
-                                ))
+                            # 创建三列布局
+                            col1, col2, col3 = st.columns(3)
                             
-                            # 添加Contango结构品种的图表
-                            for variety, structure, contracts, closes in contango_results:
-                                fig.add_trace(go.Scatter(
-                                    x=contracts,
-                                    y=closes,
-                                    mode='lines+markers',
-                                    name=f'{variety} (Contango)',
-                                    line=dict(color='green', width=2),
-                                    marker=dict(size=6)
-                                ))
+                            with col1:
+                                st.subheader("Back结构（近强远弱）")
+                                if back_results:
+                                    for variety, structure, contracts, closes in back_results:
+                                        try:
+                                            st.markdown(f"**{variety}**")
+                                            # 安全计算价格变化百分比
+                                            changes = ['']
+                                            for i in range(len(closes)-1):
+                                                if closes[i] != 0:
+                                                    change_pct = ((closes[i+1]-closes[i])/closes[i]*100)
+                                                    changes.append(f'{change_pct:+.2f}%')
+                                                else:
+                                                    changes.append('N/A')
+                                            
+                                            price_df = pd.DataFrame({
+                                                '合约': contracts,
+                                                '收盘价': closes,
+                                                '变化': changes
+                                            })
+                                            st.dataframe(price_df, use_container_width=True)
+                                            st.markdown("---")
+                                        except Exception as e:
+                                            st.warning(f"显示{variety}数据时出错: {str(e)}")
+                                            continue
+                                else:
+                                    st.info("无Back结构品种")
                             
-                            fig.update_layout(
-                                title='期限结构分析图',
-                                xaxis_title='合约',
-                                yaxis_title='收盘价',
-                                height=500,
-                                showlegend=True
-                            )
+                            with col2:
+                                st.subheader("Contango结构（近弱远强）")
+                                if contango_results:
+                                    for variety, structure, contracts, closes in contango_results:
+                                        try:
+                                            st.markdown(f"**{variety}**")
+                                            # 安全计算价格变化百分比
+                                            changes = ['']
+                                            for i in range(len(closes)-1):
+                                                if closes[i] != 0:
+                                                    change_pct = ((closes[i+1]-closes[i])/closes[i]*100)
+                                                    changes.append(f'{change_pct:+.2f}%')
+                                                else:
+                                                    changes.append('N/A')
+                                            
+                                            price_df = pd.DataFrame({
+                                                '合约': contracts,
+                                                '收盘价': closes,
+                                                '变化': changes
+                                            })
+                                            st.dataframe(price_df, use_container_width=True)
+                                            st.markdown("---")
+                                        except Exception as e:
+                                            st.warning(f"显示{variety}数据时出错: {str(e)}")
+                                            continue
+                                else:
+                                    st.info("无Contango结构品种")
                             
-                            st.plotly_chart(fig, use_container_width=True)
+                            with col3:
+                                st.subheader("Flat结构（价格相近）")
+                                if flat_results:
+                                    for variety, structure, contracts, closes in flat_results:
+                                        try:
+                                            st.markdown(f"**{variety}**")
+                                            # 安全计算价格变化百分比
+                                            changes = ['']
+                                            for i in range(len(closes)-1):
+                                                if closes[i] != 0:
+                                                    change_pct = ((closes[i+1]-closes[i])/closes[i]*100)
+                                                    changes.append(f'{change_pct:+.2f}%')
+                                                else:
+                                                    changes.append('N/A')
+                                            
+                                            price_df = pd.DataFrame({
+                                                '合约': contracts,
+                                                '收盘价': closes,
+                                                '变化': changes
+                                            })
+                                            st.dataframe(price_df, use_container_width=True)
+                                            st.markdown("---")
+                                        except Exception as e:
+                                            st.warning(f"显示{variety}数据时出错: {str(e)}")
+                                            continue
+                                else:
+                                    st.info("无Flat结构品种")
+                            
+                            # 统计信息
+                            st.markdown("---")
+                            st.markdown(f"""
+                            ### 统计信息
+                            - Back结构品种数量: {len(back_results)}
+                            - Contango结构品种数量: {len(contango_results)}
+                            - Flat结构品种数量: {len(flat_results)}
+                            - 总品种数量: {len(structure_results)}
+                            """)
+                            
+                            # 创建期限结构图表
+                            try:
+                                if back_results or contango_results:
+                                    fig = go.Figure()
+                                    
+                                    # 添加Back结构品种的图表
+                                    for variety, structure, contracts, closes in back_results:
+                                        fig.add_trace(go.Scatter(
+                                            x=contracts,
+                                            y=closes,
+                                            mode='lines+markers',
+                                            name=f'{variety} (Back)',
+                                            line=dict(color='red', width=2),
+                                            marker=dict(size=6)
+                                        ))
+                                    
+                                    # 添加Contango结构品种的图表
+                                    for variety, structure, contracts, closes in contango_results:
+                                        fig.add_trace(go.Scatter(
+                                            x=contracts,
+                                            y=closes,
+                                            mode='lines+markers',
+                                            name=f'{variety} (Contango)',
+                                            line=dict(color='green', width=2),
+                                            marker=dict(size=6)
+                                        ))
+                                    
+                                    fig.update_layout(
+                                        title='期限结构分析图',
+                                        xaxis_title='合约',
+                                        yaxis_title='收盘价',
+                                        height=500,
+                                        showlegend=True
+                                    )
+                                    
+                                    st.plotly_chart(fig, use_container_width=True)
+                            except Exception as e:
+                                st.warning(f"生成期限结构图表时出错: {str(e)}")
+                        else:
+                            st.warning("没有找到可分析的期限结构数据")
                     else:
-                        st.warning("没有找到可分析的期限结构数据")
-                else:
-                    st.warning("无法获取期货行情数据，请检查网络连接或稍后重试")
+                        st.warning("无法获取期货行情数据，请检查网络连接或稍后重试")
+                        
+                except Exception as e:
+                    st.error(f"期限结构分析出错: {str(e)}")
+                    st.info("请继续查看其他策略分析结果")
             
             # 显示家人席位反向操作策略页面
             with tabs[3]:
