@@ -9,6 +9,7 @@ from plotly.subplots import make_subplots
 import plotly.express as px
 import io
 import akshare as ak  # 新增导入
+from retail_reverse_strategy import analyze_all_positions  # 重新添加导入
 
 # 设置页面配置
 st.set_page_config(
@@ -163,6 +164,10 @@ def main():
             if not results:
                 st.error("获取数据失败，请检查日期是否有效")
                 return
+            
+            # 获取家人席位反向操作策略结果（使用原始实现）
+            retail_results = analyze_all_positions(".")
+            
             # 生成图表
             charts = generate_charts(results)
             # 为每个策略创建标签页，并添加策略总结标签页和家人席位反向操作策略页
@@ -503,119 +508,45 @@ def main():
             # 显示家人席位反向操作策略
             with tabs[3]:
                 st.header("家人席位反向操作策略")
-                strategy_name = "家人席位反向操作策略"
-                long_signals = []
-                short_signals = []
                 
-                # 调试信息
-                st.write(f"总合约数量: {len(results)}")
+                # 使用原始的retail_results
+                retail_long = []
+                retail_short = []
                 
-                # 检查第一个合约的原始数据
-                if results:
-                    first_contract = list(results.keys())[0]
-                    first_data = results[first_contract]['raw_data']
-                    st.write(f"第一个合约 {first_contract} 的席位名称:")
-                    st.write("多单席位:", first_data['long_party_name'].tolist())
-                    st.write("空单席位:", first_data['short_party_name'].tolist())
-                    
-                    # 检查是否有家人席位
-                    retail_seats = ["东方财富", "平安期货", "徽商期货"]
-                    found_retail_long = [seat for seat in first_data['long_party_name'] if seat in retail_seats]
-                    found_retail_short = [seat for seat in first_data['short_party_name'] if seat in retail_seats]
-                    st.write("找到的家人多单席位:", found_retail_long)
-                    st.write("找到的家人空单席位:", found_retail_short)
-                
-                contracts_with_strategy = 0
-                strategy_results_debug = []
-                
-                for contract, data in results.items():
-                    st.write(f"检查合约: {contract}")
-                    st.write(f"可用策略: {list(data['strategies'].keys())}")
-                    
-                    if strategy_name in data['strategies']:
-                        contracts_with_strategy += 1
-                        strategy_data = data['strategies'][strategy_name]
-                        strategy_results_debug.append({
+                for contract, data in retail_results.items():
+                    if data['signal'] == '看多':
+                        retail_long.append({
                             'contract': contract,
-                            'signal': strategy_data['signal'],
-                            'reason': strategy_data['reason'],
-                            'strength': strategy_data['strength']
+                            'strength': data['strength'],
+                            'reason': data['reason'],
+                            'seat_details': data['seat_details'],
+                            'raw_df': data['raw_df'],
+                            'retail_ratio': data['retail_ratio']
                         })
-                        
-                        st.write(f"策略结果: {strategy_data}")
-                        
-                        if strategy_data['signal'] == '看多':
-                            signal_info = {
-                                'contract': contract,
-                                'strength': strategy_data['strength'],
-                                'reason': strategy_data['reason'],
-                                'retail_ratio': strategy_data['strength'],  # strength即为retail_ratio
-                                'raw_df': data['raw_data']
-                            }
-                            
-                            # 计算seat_details
-                            df = data['raw_data']
-                            retail_seats = ["东方财富", "平安期货", "徽商期货"]
-                            seat_stats = {name: {'long_chg': 0, 'short_chg': 0} for name in retail_seats}
-                            for _, row in df.iterrows():
-                                if row['long_party_name'] in retail_seats:
-                                    seat_stats[row['long_party_name']]['long_chg'] += row['long_open_interest_chg'] if pd.notna(row['long_open_interest_chg']) else 0
-                                if row['short_party_name'] in retail_seats:
-                                    seat_stats[row['short_party_name']]['short_chg'] += row['short_open_interest_chg'] if pd.notna(row['short_open_interest_chg']) else 0
-                            
-                            seat_details = []
-                            for seat, chg in seat_stats.items():
-                                if chg['long_chg'] != 0 or chg['short_chg'] != 0:
-                                    seat_details.append({'seat_name': seat, 'long_chg': chg['long_chg'], 'short_chg': chg['short_chg']})
-                            signal_info['seat_details'] = seat_details
-                            
-                            long_signals.append(signal_info)
-                            
-                        elif strategy_data['signal'] == '看空':
-                            signal_info = {
-                                'contract': contract,
-                                'strength': strategy_data['strength'],
-                                'reason': strategy_data['reason'],
-                                'retail_ratio': strategy_data['strength'],  # strength即为retail_ratio
-                                'raw_df': data['raw_data']
-                            }
-                            
-                            # 计算seat_details
-                            df = data['raw_data']
-                            retail_seats = ["东方财富", "平安期货", "徽商期货"]
-                            seat_stats = {name: {'long_chg': 0, 'short_chg': 0} for name in retail_seats}
-                            for _, row in df.iterrows():
-                                if row['long_party_name'] in retail_seats:
-                                    seat_stats[row['long_party_name']]['long_chg'] += row['long_open_interest_chg'] if pd.notna(row['long_open_interest_chg']) else 0
-                                if row['short_party_name'] in retail_seats:
-                                    seat_stats[row['short_party_name']]['short_chg'] += row['short_open_interest_chg'] if pd.notna(row['short_open_interest_chg']) else 0
-                            
-                            seat_details = []
-                            for seat, chg in seat_stats.items():
-                                if chg['long_chg'] != 0 or chg['short_chg'] != 0:
-                                    seat_details.append({'seat_name': seat, 'long_chg': chg['long_chg'], 'short_chg': chg['short_chg']})
-                            signal_info['seat_details'] = seat_details
-                            
-                            short_signals.append(signal_info)
-                
-                st.write(f"包含家人席位策略的合约数量: {contracts_with_strategy}")
-                st.write("策略结果调试信息:")
-                st.write(strategy_results_debug)
-                
-                # 存储策略信号数据
-                all_strategy_signals[strategy_name] = {
-                    'long': long_signals,
-                    'short': short_signals
-                }
+                    elif data['signal'] == '看空':
+                        retail_short.append({
+                            'contract': contract,
+                            'strength': data['strength'],
+                            'reason': data['reason'],
+                            'seat_details': data['seat_details'],
+                            'raw_df': data['raw_df'],
+                            'retail_ratio': data['retail_ratio']
+                        })
                 
                 # 按家人席位持仓占比排序（从大到小）
-                long_signals = sorted(long_signals, key=lambda x: float(x.get('retail_ratio', 0)), reverse=True)
-                short_signals = sorted(short_signals, key=lambda x: float(x.get('retail_ratio', 0)), reverse=True)
+                retail_long = sorted(retail_long, key=lambda x: float(x.get('retail_ratio', 0)), reverse=True)
+                retail_short = sorted(retail_short, key=lambda x: float(x.get('retail_ratio', 0)), reverse=True)
+                
+                # 存储策略信号数据
+                all_strategy_signals['家人席位反向操作策略'] = {
+                    'long': retail_long,
+                    'short': retail_short
+                }
                 
                 # 显示看多信号
                 st.subheader("看多信号")
-                if long_signals:
-                    for idx, signal in enumerate(long_signals, 1):
+                if retail_long:
+                    for idx, signal in enumerate(retail_long, 1):
                         st.markdown(f"**{idx}. {signal['contract']}**")
                         st.markdown(f"强度: {signal['strength']:.4f} | 家人席位占比: {signal['retail_ratio']:.2%}")
                         st.markdown(f"信号原因: {signal['reason']}")
@@ -634,8 +565,8 @@ def main():
                 
                 # 显示看空信号
                 st.subheader("看空信号")
-                if short_signals:
-                    for idx, signal in enumerate(short_signals, 1):
+                if retail_short:
+                    for idx, signal in enumerate(retail_short, 1):
                         st.markdown(f"**{idx}. {signal['contract']}**")
                         st.markdown(f"强度: {signal['strength']:.4f} | 家人席位占比: {signal['retail_ratio']:.2%}")
                         st.markdown(f"信号原因: {signal['reason']}")
@@ -656,9 +587,10 @@ def main():
                 st.markdown("---")
                 st.markdown(f"""
                 ### 统计信息
-                - 看多信号品种数量：{len(long_signals)}
-                - 看空信号品种数量：{len(short_signals)}
-                - 总分析品种数量：{contracts_with_strategy}
+                - 看多信号品种数量：{len(retail_long)}
+                - 看空信号品种数量：{len(retail_short)}
+                - 总分析品种数量：{len(retail_results)}
+                - 中性信号品种数量：{len([r for r in retail_results.values() if r['signal'] == '中性'])}
                 """)
             
             # 显示策略总结页面
