@@ -83,6 +83,66 @@ class SpiderWebStrategy(Strategy):
             print(f"分析蜘蛛网指标时出错：{str(e)}")
             return "错误", f"数据处理错误：{str(e)}", 0
 
+class RetailReverseStrategy(Strategy):
+    """家人席位反向操作策略"""
+    def __init__(self):
+        super().__init__("家人席位反向操作策略")
+        self.retail_seats = ["东方财富", "平安期货", "徽商期货"]
+    
+    def analyze(self, data):
+        """分析家人席位持仓变化并生成反向交易信号"""
+        try:
+            df = data['raw_data']
+            
+            # 统计家人席位的多空变化（合并同一席位）
+            seat_stats = {name: {'long_chg': 0, 'short_chg': 0} for name in self.retail_seats}
+            for _, row in df.iterrows():
+                if row['long_party_name'] in self.retail_seats:
+                    seat_stats[row['long_party_name']]['long_chg'] += row['long_open_interest_chg'] if pd.notna(row['long_open_interest_chg']) else 0
+                if row['short_party_name'] in self.retail_seats:
+                    seat_stats[row['short_party_name']]['short_chg'] += row['short_open_interest_chg'] if pd.notna(row['short_open_interest_chg']) else 0
+
+            # 只保留有变化的席位
+            seat_details = []
+            for seat, chg in seat_stats.items():
+                if chg['long_chg'] != 0 or chg['short_chg'] != 0:
+                    seat_details.append({'seat_name': seat, 'long_chg': chg['long_chg'], 'short_chg': chg['short_chg']})
+
+            if not seat_details:
+                return "中性", "未发现家人席位持仓变化", 0
+
+            # 判断信号 - 家人席位多单增加时看空，空单增加时看多
+            all_long_increase = all(seat['long_chg'] > 0 for seat in seat_details)
+            all_short_increase = all(seat['short_chg'] > 0 for seat in seat_details)
+            
+            # 计算家人席位持仓占比
+            retail_long_position = 0
+            retail_short_position = 0
+            
+            for _, row in df.iterrows():
+                if row['long_party_name'] in self.retail_seats:
+                    retail_long_position += row['long_open_interest'] if pd.notna(row['long_open_interest']) else 0
+                if row['short_party_name'] in self.retail_seats:
+                    retail_short_position += row['short_open_interest'] if pd.notna(row['short_open_interest']) else 0
+            
+            total_long = df['long_open_interest'].sum()
+            total_short = df['short_open_interest'].sum()
+
+            if all_long_increase:
+                # 家人席位多单增加，看空
+                retail_ratio = retail_long_position / total_long if total_long > 0 else 0
+                return "看空", f"家人席位多单增加，持仓占比{retail_ratio:.2%}", retail_ratio
+            elif all_short_increase:
+                # 家人席位空单增加，看多
+                retail_ratio = retail_short_position / total_short if total_short > 0 else 0
+                return "看多", f"家人席位空单增加，持仓占比{retail_ratio:.2%}", retail_ratio
+            else:
+                return "中性", "家人席位持仓变化不符合策略要求", 0
+                
+        except Exception as e:
+            print(f"分析家人席位时出错：{str(e)}")
+            return "错误", f"数据处理错误：{str(e)}", 0
+
 class FuturesDataFetcher:
     """期货数据获取类"""
     def __init__(self, save_dir):
@@ -126,14 +186,12 @@ class FuturesDataFetcher:
         """
         success = True
         for exchange_name, config in self.exchange_config.items():
-            print(f"正在获取 {exchange_name} 数据...")
             try:
                 # 获取数据
                 data_dict = config["func"](date=trade_date)
                 
                 # 检查数据是否为空
                 if not data_dict:
-                    print(f"警告：{exchange_name} 未获取到数据，请检查日期有效性")
                     success = False
                     continue
 
@@ -144,10 +202,7 @@ class FuturesDataFetcher:
                         clean_name = config["sheet_handler"](raw_sheet_name)
                         df.to_excel(writer, sheet_name=clean_name, index=False)
                 
-                print(f"成功保存：{save_path}")
-                
             except Exception as e:
-                print(f"获取 {exchange_name} 数据时发生错误：{str(e)}")
                 success = False
         
         return success
@@ -167,22 +222,11 @@ class FuturesPositionAnalyzer:
             '上期所': '上期所持仓.xlsx',
             '广期所': '广期所持仓.xlsx'
         }
-        self.previous_data = None
         self.strategies = [
             PowerChangeStrategy(),
-            SpiderWebStrategy()
+            SpiderWebStrategy(),
+            RetailReverseStrategy()
         ]
-        
-        # 检查数据目录是否存在
-        if not os.path.exists(data_dir):
-            print(f"错误：数据目录 {data_dir} 不存在")
-            return
-            
-        # 检查数据文件是否存在
-        for exchange, filename in self.exchanges.items():
-            file_path = os.path.join(data_dir, filename)
-            if not os.path.exists(file_path):
-                print(f"警告：{exchange}数据文件 {file_path} 不存在")
     
     def read_exchange_data(self, exchange_name):
         """
@@ -192,25 +236,13 @@ class FuturesPositionAnalyzer:
         """
         file_path = os.path.join(self.data_dir, self.exchanges[exchange_name])
         if not os.path.exists(file_path):
-            print(f"警告：{file_path} 文件不存在")
             return {}
             
         try:
             # 读取Excel文件中的所有sheet
-            print(f"正在读取 {exchange_name} 数据...")
             data_dict = pd.read_excel(file_path, sheet_name=None)
-            
-            # 打印每个sheet的名称和列名，用于调试
-            print(f"\n{exchange_name}数据文件包含以下sheet：")
-            for sheet_name, df in data_dict.items():
-                print(f"\nSheet: {sheet_name}")
-                print(f"列名: {df.columns.tolist()}")
-                print(f"数据行数: {len(df)}")
-            
-            print(f"\n成功读取 {exchange_name} 数据，包含 {len(data_dict)} 个品种")
             return data_dict
         except Exception as e:
-            print(f"读取 {exchange_name} 数据时出错：{str(e)}")
             return {}
     
     def process_position_data(self, df):
@@ -221,16 +253,6 @@ class FuturesPositionAnalyzer:
         """
         try:
             # 自动适配郑商所的实际列名
-            col_map = {
-                'long_party_name': 'g_party_n',
-                'long_open_interest': 'open_inten',
-                'long_open_interest_chg': 'inten_intert',
-                'short_party_name': 't_party_n',
-                'short_open_interest': 'open_inten.1',
-                'short_open_interest_chg': 'inten_intert.1',
-                'vol': 'vol'
-            }
-            # 如果实际列名包含g_party_n等，则进行重命名
             if 'g_party_n' in df.columns and 't_party_n' in df.columns:
                 df = df.rename(columns={
                     'g_party_n': 'long_party_name',
@@ -245,41 +267,27 @@ class FuturesPositionAnalyzer:
             required_columns = ['long_party_name', 'long_open_interest', 'long_open_interest_chg',
                               'short_party_name', 'short_open_interest', 'short_open_interest_chg',
                               'vol']
-            # 打印当前数据的列名，用于调试
-            print(f"当前数据的列名: {df.columns.tolist()}")
+            
             if not all(col in df.columns for col in required_columns):
-                print(f"警告：数据缺少必要的列 {required_columns}")
-                print(f"实际列名：{df.columns.tolist()}")
                 return None
+                
             # 只保留前20名会员的数据
             df = df.head(20)
-            # 确保数值列为数值类型，先做字符串清洗（去逗号、空格）
+            
+            # 确保数值列为数值类型
             numeric_columns = ['long_open_interest', 'long_open_interest_chg',
                              'short_open_interest', 'short_open_interest_chg',
                              'vol']
             for col in numeric_columns:
                 df[col] = df[col].astype(str).str.replace(',', '').str.replace(' ', '').replace({'nan': None})
                 df[col] = pd.to_numeric(df[col], errors='coerce')
-            # 打印清洗后的数值列，便于调试
-            print("清洗后前5行数值数据：")
-            print(df[numeric_columns].head())
+            
             # 计算多空单总量和变化量
             total_long = df['long_open_interest'].sum()
             total_short = df['short_open_interest'].sum()
             total_long_chg = df['long_open_interest_chg'].sum()
             total_short_chg = df['short_open_interest_chg'].sum()
-            # 打印处理后的数据统计，用于调试
-            print(f"\n处理后的数据统计：")
-            print(f"多单总量: {total_long:.0f}")
-            print(f"空单总量: {total_short:.0f}")
-            print(f"多单变化: {total_long_chg:.0f}")
-            print(f"空单变化: {total_short_chg:.0f}")
-            # 蜘蛛网策略有效席位调试
-            print("蜘蛛网策略有效席位筛选前：")
-            print(df[['vol', 'long_open_interest', 'short_open_interest']].head(10))
-            valid_seats = df[(df['vol'].notna()) & (df['long_open_interest'].notna()) & (df['short_open_interest'].notna())]
-            print(f"蜘蛛网策略有效席位数：{len(valid_seats)}")
-            # 返回数据
+            
             return {
                 'total_long': total_long,
                 'total_short': total_short,
@@ -288,7 +296,6 @@ class FuturesPositionAnalyzer:
                 'raw_data': df
             }
         except Exception as e:
-            print(f"处理数据时出错：{str(e)}")
             return None
     
     def analyze_all_positions(self):
@@ -299,15 +306,12 @@ class FuturesPositionAnalyzer:
         results = {}
         
         for exchange_name in self.exchanges.keys():
-            print(f"\n正在分析{exchange_name}数据...")
             exchange_data = self.read_exchange_data(exchange_name)
             
             if not exchange_data:
-                print(f"跳过 {exchange_name} 分析：无数据")
                 continue
                 
             for contract_name, df in exchange_data.items():
-                print(f"处理 {contract_name} 数据...")
                 processed_data = self.process_position_data(df)
                 if processed_data:
                     # 对每个策略进行分析
@@ -333,14 +337,11 @@ class FuturesPositionAnalyzer:
         :param trade_date: 交易日期，格式：YYYYMMDD
         :return: 分析结果
         """
-        print(f"\n开始获取 {trade_date} 的持仓数据...")
-        
         # 获取数据
         if not self.data_fetcher.fetch_data(trade_date):
-            print("警告：部分数据获取失败，可能影响分析结果")
+            return None
         
         # 分析数据
-        print("\n开始分析持仓数据...")
         results = self.analyze_all_positions()
         
         return results
