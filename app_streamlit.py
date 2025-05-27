@@ -867,17 +867,17 @@ def main():
                 
                 if not include_term_structure:
                     st.warning("⚠️ 期限结构分析已在设置中关闭。如需启用，请在侧边栏中勾选'包含期限结构分析'。")
-                else:
+                                else:
                     st.info("基于真实期货合约收盘价进行期限结构分析")
                     
                     try:
                         # 获取期货行情数据
-                        st.info("正在获取期货行情数据...")
-                        price_data = get_futures_price_data(trade_date_str)
-                    
-                    if not price_data.empty:
-                        # 分析期限结构
-                        structure_results = analyze_term_structure_with_prices(price_data)
+                        with st.spinner("正在获取期货行情数据..."):
+                            price_data = get_futures_price_data(trade_date_str)
+                        
+                        if not price_data.empty:
+                            # 分析期限结构
+                            structure_results = analyze_term_structure_with_prices(price_data)
                         
                         if structure_results:
                             # 按期限结构类型分类
